@@ -116,13 +116,13 @@ fn handle_client(tcp: &mut TcpInfo, ctrl_receiver: Receiver<()>) {
         match Message::read(&mut tcp.conn) {
             Ok(buffer) => {
                 let request = Request::from_json(&buffer).unwrap();
-                println!("-- received request: {:?}", request);
+                println!("-- received request: {}", request.to_pretty_json().unwrap());
                 
                 
                 match Executor::execute(request) {
                     Ok(answer) => {
                         Message::write(&mut tcp.conn, answer.to_json().unwrap().as_bytes()).unwrap();
-                        println!("-- sent answer: {:?}", answer);
+                        println!("-- sent answer: {}", answer.to_pretty_json().unwrap());
                     },
                     Err(e) => {
                         let mut answer = Answer::new(1, "ERROR".into());

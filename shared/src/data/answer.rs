@@ -19,15 +19,24 @@ impl Answer {
             data: Vec::new()
         }
     }
+    pub fn new_with_data(code: i32, message: String, data: Vec<String>) -> Self {
+        Self {
+            code,
+            message,
+            data
+        }
+    }
     
     pub fn add(&mut self, data: String) {
         self.data.push(data);
     }
-    
+
+    pub fn to_pretty_json(&self) -> Result<String> {
+        serde_json::to_string_pretty(self)
+    }
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(self)
     }
-    
     pub fn from_json(json: &[u8]) -> Result<Self> {
         serde_json::from_str(String::from_utf8_lossy(json).as_ref())
     }

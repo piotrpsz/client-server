@@ -17,6 +17,9 @@ impl Request {
             params
         }
     }
+    pub fn to_pretty_json(&self) -> Result<String> {
+        serde_json::to_string_pretty(self)
+    }
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(self)
     }

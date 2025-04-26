@@ -4,9 +4,9 @@ use shared::data::{
 };
 
 use std::io;
-use std::io::{ Read, Write, ErrorKind};
+use std::io::{ stdin, ErrorKind};
 use std::net::*;
-use byteorder::{ NetworkEndian, ReadBytesExt, WriteBytesExt };
+use shared::data::message::Message;
 
 fn main() -> io::Result<()>{
     let addr = SocketAddr::from(([127, 0, 0, 1], 25105));
@@ -27,47 +27,30 @@ fn main() -> io::Result<()>{
 }
 
 fn handle_connection(mut socket: TcpStream) -> io::Result<()> {
-    {
-        let request = Request::new("pwd".into(), vec![]);
-        send_message(&mut socket, request.to_json().unwrap().as_bytes())?;
-        println!("-- sent: {:?}", request);
+    let mut input = String::new();
+    loop {
+        input.clear();
+        eprint!("Give command: ");
+        stdin().read_line(&mut input)?;
+        input = input.trim().to_string();
+        if input.is_empty() {
+            break;
+        }
         
-        let answer = receive_message(&mut socket)?;
+        let tokens = input.split_whitespace().collect::<Vec<&str>>();
+        let command = tokens[0];
+        let mut args = Vec::with_capacity(tokens.len() - 1);
+        for token in tokens[1..].iter() {
+            args.push(token.to_string());       
+        }
+                
+        let request = Request::new(command.into(), args);
+        Message::write(&mut socket, request.to_json().unwrap().as_bytes())?;
+        println!("-- sent: {}", request.to_pretty_json()?);
+        
+        let answer = Message::read(&mut socket)?;
         let answer = Answer::from_json(&answer);
-        println!("-- received: {:?}", answer);
-    }
-
-    {
-        let request = Request::new("cd".into(), vec![]);
-        send_message(&mut socket, request.to_json().unwrap().as_bytes())?;
-        println!("-- sent: {:?}", request);
-
-        let answer = receive_message(&mut socket)?;
-        let answer = Answer::from_json(&answer);
-        println!("-- received: {:?}", answer);
-    }
-
-    {
-        let request = Request::new("cd".into(), vec!["/home/piotr/Projects".into()]);
-        send_message(&mut socket, request.to_json().unwrap().as_bytes())?;
-        println!("-- sent: {:?}", request);
-
-        let answer = receive_message(&mut socket)?;
-        let answer = Answer::from_json(&answer);
-        println!("-- received: {:?}", answer);
+        println!("-- received: {}", answer?.to_pretty_json()?);
     }
     Ok(())
-}
-
-fn send_message(socket: &mut TcpStream, message: &[u8]) -> io::Result<()> {
-    socket.write_u32::<NetworkEndian>(message.len() as u32)?;
-    socket.write_all(message)?;
-    Ok(())
-}
-
-fn receive_message(socket: &mut TcpStream) -> io::Result<Vec<u8>> {
-    let size = socket.read_u32::<NetworkEndian>()?;
-    let mut message = vec![0; size as usize];
-    socket.read_exact(&mut message)?;
-    Ok(message)
 }

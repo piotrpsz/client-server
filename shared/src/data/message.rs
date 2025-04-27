@@ -2,6 +2,7 @@ use std::io;
 use std::io::{Read, Write};
 use std::net::*;
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
+use crate::crypto::blowfish;
 
 pub struct Message;
 

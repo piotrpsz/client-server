@@ -7,10 +7,12 @@ use std::net::*;
 use std::thread;
 use crossbeam_channel::{unbounded, bounded, Sender, Receiver, select};
 use shared::data::{
-    message::Message,
-    request::Request
+        message::Message,
+        request::Request,
+        answer::Answer
 };
-use shared::data::answer::Answer;
+use shared::crypto::blowfish::Blowfish;
+
 use crate::executor::Executor;
 
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -49,6 +51,30 @@ fn accept(listener: &TcpListener, sender: Sender<TcpInfo>) {
     }
 }
 
+fn main() {
+    eprintln!("Hello, world!");
+    let key = "TESTKEY".as_bytes();
+    let bf = Blowfish::new(key).unwrap();
+    let a = 1u32;
+    let b = 2u32;
+    let expected_a =  0xdf333fd2u32;
+    let expected_b =  0x30a71bb4u32;
+    let result = bf.encrypt(a, b);
+    // assert_eq!(result.0, expected_a);
+    // assert_eq!(result.1, expected_b);
+    eprintln!("{:x}", expected_a );
+    eprintln!("{:x}", expected_b );
+    if result.0 == expected_a && result.1 == expected_b {
+        eprintln!("Encryption test passed");
+    }
+    
+    let result1 = bf.decrypt(expected_a, expected_b);
+    if result1.0 == a && result1.1 == b {
+        eprintln!("Decryption test passed");
+    }
+    
+}
+/*
 fn main() -> Result<(), Box<dyn Error>>{
     let ctrl_receiver = ctrlc_handler()?;
     let (accept_sender, accept_receiver) = bounded::<TcpInfo>(1);
@@ -100,7 +126,7 @@ fn main() -> Result<(), Box<dyn Error>>{
     
     Ok(())
 }
-
+*/
 fn handle_client(tcp: &mut TcpInfo, ctrl_receiver: Receiver<()>) {
     TASK_COUNT.fetch_add(1, Relaxed);
     let task_id = TASK_ID.fetch_add(1, Relaxed);

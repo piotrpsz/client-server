@@ -52,27 +52,40 @@ fn accept(listener: &TcpListener, sender: Sender<TcpInfo>) {
 }
 
 fn main() {
-    eprintln!("Hello, world!");
+    // use shared::crypto::crypto;
+    // let data = vec![1u8, 12, 3, 14, 5, 6, 17, 8, 9, 10];
+    // let block = crypto::bytes_to_block(&data);
+    // let mut buffer = vec![0u8; 16];
+    // crypto::block_to_bytes(block, &mut buffer);
+    // eprintln!("{:?}", buffer);
+    
+    
     let key = "TESTKEY".as_bytes();
     let bf = Blowfish::new(key).unwrap();
-    let a = 1u32;
-    let b = 2u32;
-    let expected_a =  0xdf333fd2u32;
-    let expected_b =  0x30a71bb4u32;
-    let result = bf.encrypt(a, b);
-    // assert_eq!(result.0, expected_a);
-    // assert_eq!(result.1, expected_b);
-    eprintln!("{:x}", expected_a );
-    eprintln!("{:x}", expected_b );
-    if result.0 == expected_a && result.1 == expected_b {
-        eprintln!("Encryption test passed");
-    }
     
-    let result1 = bf.decrypt(expected_a, expected_b);
-    if result1.0 == a && result1.1 == b {
-        eprintln!("Decryption test passed");
-    }
+    let text = "Piotr Włodzimierz Pszczółkowski";
+    let cipher = bf.encrypt_ecb(text.as_bytes());
+    let plain = bf.decrypt_ecb(cipher.as_slice());
+    assert_eq!(plain, text.as_bytes());
     
+    // let a = 1u32;
+    // let b = 2u32;
+    // let expected_a =  0xdf333fd2u32;
+    // let expected_b =  0x30a71bb4u32;
+    // let result = bf.encrypt(a, b);
+    // // assert_eq!(result.0, expected_a);
+    // // assert_eq!(result.1, expected_b);
+    // eprintln!("{:x}", expected_a );
+    // eprintln!("{:x}", expected_b );
+    // if result.0 == expected_a && result.1 == expected_b {
+    //     eprintln!("Encryption test passed");
+    // }
+    // 
+    // let result1 = bf.decrypt(expected_a, expected_b);
+    // if result1.0 == a && result1.1 == b {
+    //     eprintln!("Decryption test passed");
+    // }
+
 }
 /*
 fn main() -> Result<(), Box<dyn Error>>{

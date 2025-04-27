@@ -1,10 +1,5 @@
 #![allow(dead_code)]
-use crate::crypto::crypto::{
-    align_to_block, 
-    block_to_bytes, 
-    bytes_to_block,
-    pad_index,
-};
+use crate::crypto::crypto::{align_to_block, block_to_bytes, bytes_to_block, pad_index, rnd_bytes};
 
 const BLOCK_SIZE: usize = 8;
 
@@ -239,9 +234,61 @@ impl Blowfish {
                 plain
             }
         }
-        
-
     }
+
+    /// Szyfrowanie CBC. Wektor IV jest losowo generowany.
+    pub fn encrypt_cbc(&self, input: &[u8]) -> Vec<u8> {
+        match input.is_empty() {
+            true => {
+                input.to_vec()
+            }
+            _ => {
+                let iv = rnd_bytes(BLOCK_SIZE);
+                let plain = align_to_block(input, BLOCK_SIZE);
+                let nbytes = plain.len();
+                let mut cipher = vec![0; nbytes + BLOCK_SIZE];
+                cipher[..BLOCK_SIZE].copy_from_slice(&iv);
+
+                let mut i: usize = 0;
+                let mut x = bytes_to_block(&cipher[..]);
+                while i < nbytes {
+                    let tmp = bytes_to_block(&plain[i..]);
+                    x = self.encrypt(tmp.0 ^ x.0, tmp.1 ^ x.1);
+                    block_to_bytes(x, &mut cipher[i + BLOCK_SIZE..]);
+                    i += BLOCK_SIZE;
+                }
+                cipher
+            }
+        }
+    }
+
+    /// Odszyfrowanie CBC.
+    pub fn decrypt_cbc(&self, cipher: &[u8]) -> Vec<u8> {
+        let nbytes = cipher.len();
+        if nbytes < (2 * BLOCK_SIZE) {
+            return cipher.to_vec();
+        }
+        // Text wynikowy będzie krótszy co najmniej o blok IV.
+        let mut plain = vec![0; nbytes - BLOCK_SIZE];
+        // Indeks ustawiamy za blokiem IV.
+        let mut i = BLOCK_SIZE;
+        
+        let mut p = bytes_to_block(cipher);
+        while i < nbytes {
+            let x = bytes_to_block(&cipher[i..]);
+            let tmp = x;
+            let c = self.decrypt_block(x);
+            block_to_bytes((c.0 ^ p.0, c.1 ^ p.1), &mut plain[(i - BLOCK_SIZE)..]);
+            p = tmp;
+            i += BLOCK_SIZE;
+        }
+
+        if let Some(idx) = pad_index(&plain) {
+             plain = plain[..idx].to_vec();
+        }
+        plain
+    }
+
 }   // end of impl
 
 /********************************************************************

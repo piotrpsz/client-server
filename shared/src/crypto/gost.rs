@@ -197,7 +197,7 @@ impl Gost {
     ****************************************************************/
     
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
-        if input.is_empty() { return input.to_vec(); }
+        if input.is_empty() { return vec![]; }
         
         let plain = align_to_block(input, BLOCK_SIZE);
         let nbytes = plain.len();
@@ -258,20 +258,18 @@ impl Gost {
 
     pub fn decrypt_cbc(&self, cipher: &[u8]) -> Vec<u8> {
         let nbytes = cipher.len();
-        if nbytes < (2 * BLOCK_SIZE) {
-            return vec![];
-        }
+        if nbytes < (2 * BLOCK_SIZE) { return vec![]; }
 
         let mut plain = vec![0u8; nbytes - BLOCK_SIZE];
         
-        let mut prv_cipher_block = bytes_to_block(&cipher[..]);
+        let mut prv_cipher_block = bytes_to_block(cipher);
         for i in (BLOCK_SIZE..nbytes).step_by(BLOCK_SIZE) {
             let cipher_block = bytes_to_block(&cipher[i..]);
             let tmp = cipher_block;
             let plain_block = self.decrypt_block(cipher_block);
             let w0 = plain_block.0 ^ prv_cipher_block.0;
             let w1 = plain_block.1 ^ prv_cipher_block.1;
-            block_to_bytes((w0, w1), &mut plain[(i - BLOCK_SIZE)..]);
+            block_to_bytes((w0, w1), &mut plain[i-BLOCK_SIZE..]);
             prv_cipher_block = tmp;
         }
 

@@ -198,51 +198,36 @@ impl Blowfish {
 
     /// Encrypts passed plain text (ECB mode).
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
-        match input.is_empty() {
-            true => {
-                input.to_vec()
-            },
-            _ => {
-                let plain = align_to_block(input, BLOCK_SIZE);
-                let nbytes = plain.len();
-                let mut cipher = vec![0; nbytes];
+        if input.is_empty() { return vec![]; }
+        
+        let plain = align_to_block(input, BLOCK_SIZE);
+        let nbytes = plain.len();
+        let mut cipher = vec![0; nbytes];
 
-                let mut i: usize = 0;
-                while i < nbytes {
-                    let mut x = bytes_to_block(&plain[i..]);
-                    x = self.encrypt_block(x);
-                    block_to_bytes(x, &mut cipher[i..]);
-                    i += BLOCK_SIZE;
-                }
-                cipher
-            }
+        for i in (0..nbytes).step_by(BLOCK_SIZE) {
+            let plain_block = bytes_to_block(&plain[i..]);
+            let cipher_block = self.encrypt_block(plain_block);
+            block_to_bytes(cipher_block, &mut cipher[i..]);
         }
+        cipher
     }
 
     /// Decrypts passed a cipher text (ECB mode).
     pub fn decrypt_ecb(&self, cipher: &[u8]) -> Vec<u8> {
-        match cipher.is_empty() {
-            true => {
-                cipher.to_vec()
-            },
-            _ => {
-                let nbytes = cipher.len();
-                let mut plain = vec![0; nbytes];
+        if cipher.is_empty() { return vec![]; }
+        
+        let nbytes = cipher.len();
+        let mut plain = vec![0; nbytes];
 
-                let mut i: usize = 0;
-                let mut x: (u32, u32);
-                while i < nbytes {
-                    x = bytes_to_block(&cipher[i..]);
-                    x = self.decrypt_block(x);
-                    block_to_bytes(x, &mut plain[i..]);
-                    i += BLOCK_SIZE;
-                }
+        for i in (0..nbytes).step_by(BLOCK_SIZE) {
+            let cipher_block = bytes_to_block(&cipher[i..]);
+            let plain_block = self.decrypt_block(cipher_block);
+            block_to_bytes(plain_block, &mut plain[i..]);
+        }
                 
-                match pad_index(&plain) {
-                    Some(idx) => plain[idx..].to_vec(),
-                    None => plain,
-                }
-            }
+        match pad_index(&plain) {
+            Some(idx) => plain[..idx].to_vec(),
+            None => plain,
         }
     }
 
@@ -606,11 +591,37 @@ mod tests {
         
         let bf = bf.unwrap();
         let plain = [
+            // "".as_bytes(),
+            "Piotr".as_bytes(),
+            // "Piotr Włodzimierz Pszczółkowski".as_bytes(),
+            // "Yamato & Musashi".as_bytes(),
+        ];
+
+        for text in plain.iter() {
+            let cipher = bf.encrypt_ecb(text);
+            let result = bf.decrypt_ecb(&cipher);
+            assert_eq!(result, text.to_vec());
+        }
+    }
+
+    #[test]
+    fn test_cbc() {
+        let key = rnd_bytes(Blowfish::max_size_key());
+        let bf = Blowfish::new(&key);
+        assert!(bf.is_ok());
+
+        let bf = bf.unwrap();
+        let plain = [
             "".as_bytes(),
             "Piotr".as_bytes(),
             "Piotr Włodzimierz Pszczółkowski".as_bytes(),
             "Yamato & Musashi".as_bytes(),
         ];
+
+        for text in plain.iter() {
+            let cipher = bf.encrypt_cbc(text);
+            let result = bf.decrypt_cbc(&cipher);
+            assert_eq!(result, text.to_vec());
+        }
     }
-    
 }

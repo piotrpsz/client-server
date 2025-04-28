@@ -89,20 +89,14 @@ impl Blowfish {
         bf.p[17] = xr;
 
         // S
-        let mut i = 0;
-        while i < 4 {
-            let mut j = 0;
-            while j < 256 {
-                b = bf.encrypt(xl, xr);
-                xl = b.0;
-                xr = b.1;
+        for i in 0..4 {
+            for j in (0..256).step_by(2) {
+                (xl, xr) = bf.encrypt(xl, xr);
                 bf.s[i][j] = xl;
                 bf.s[i][j + 1] = xr;
-                j += 2;
             }
-            i += 1;
         }
-
+        
         Ok(bf)
     }
 
@@ -112,8 +106,27 @@ impl Blowfish {
     pub fn max_size_key() -> usize {
         MAX_KEY_SIZE
     }
+
+    fn f(&self, x: u32) -> u32 {
+        unsafe {
+            let ptr: *const u8 = &x as *const u32 as *const u8;
+
+            let d = *ptr.offset(0) as usize;
+            let c = *ptr.offset(1) as usize;
+            let b = *ptr.offset(2) as usize;
+            let a = *ptr.offset(3) as usize;
+
+            (self.s[0][a].wrapping_add(self.s[1][b]) ^ self.s[2][c]).wrapping_add(self.s[3][d])
+        }
+    }
+
+
+    /****************************************************************
+    *                                                               *
+    *                           B L O C K                           *
+    *                                                               *
+    ****************************************************************/
     
-    /// Szyfrowanie jednego bloku 64 bit = tuple (u32,u32).
     fn encrypt_block(&self, x: (u32, u32)) -> (u32, u32) {
         self.encrypt(x.0, x.1)
     }
@@ -181,25 +194,15 @@ impl Blowfish {
         (xr ^ self.p[0], xl ^ self.p[1])
     }
 
-
-    fn f(&self, x: u32) -> u32 {
-        unsafe {
-            let ptr: *const u8 = &x as *const u32 as *const u8;
-
-            let d = *ptr.offset(0) as usize;
-            let c = *ptr.offset(1) as usize;
-            let b = *ptr.offset(2) as usize;
-            let a = *ptr.offset(3) as usize;
-
-            // ((self.s[0][a] + self.s[1][b]) ^ self.s[2][c]) + self.s[3][d]
-            (self.s[0][a].wrapping_add(self.s[1][b]) ^ self.s[2][c]).wrapping_add(self.s[3][d])
-        }
-    }
-
-    /// Encrypts passed plain text (ECB mode).
+    /****************************************************************
+    *                                                               *
+    *                            E C B                              *
+    *                                                               *
+    ****************************************************************/
+    
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
-        
+
         let plain = align_to_block(input, BLOCK_SIZE);
         let nbytes = plain.len();
         let mut cipher = vec![0; nbytes];
@@ -212,10 +215,9 @@ impl Blowfish {
         cipher
     }
 
-    /// Decrypts passed a cipher text (ECB mode).
     pub fn decrypt_ecb(&self, cipher: &[u8]) -> Vec<u8> {
         if cipher.is_empty() { return vec![]; }
-        
+
         let nbytes = cipher.len();
         let mut plain = vec![0; nbytes];
 
@@ -224,64 +226,57 @@ impl Blowfish {
             let plain_block = self.decrypt_block(cipher_block);
             block_to_bytes(plain_block, &mut plain[i..]);
         }
-                
+
         match pad_index(&plain) {
             Some(idx) => plain[..idx].to_vec(),
             None => plain,
         }
     }
 
-    /// Szyfrowanie CBC. Wektor IV jest losowo generowany.
     pub fn encrypt_cbc(&self, input: &[u8]) -> Vec<u8> {
-        match input.is_empty() {
-            true => {
-                input.to_vec()
-            }
-            _ => {
-                let iv = rnd_bytes(BLOCK_SIZE);
-                let plain = align_to_block(input, BLOCK_SIZE);
-                let nbytes = plain.len();
-                let mut cipher = vec![0; nbytes + BLOCK_SIZE];
-                cipher[..BLOCK_SIZE].copy_from_slice(&iv);
+        if input.is_empty() { return vec![]; }
+        
+        let iv = rnd_bytes(BLOCK_SIZE);
+        let plain = align_to_block(input, BLOCK_SIZE);         
+        let nbytes = plain.len();
+        let mut cipher = vec![0; nbytes + BLOCK_SIZE];
+        cipher[..BLOCK_SIZE].copy_from_slice(&iv);
 
-                let mut i: usize = 0;
-                let mut x = bytes_to_block(&cipher[..]);
-                while i < nbytes {
-                    let tmp = bytes_to_block(&plain[i..]);
-                    x = self.encrypt(tmp.0 ^ x.0, tmp.1 ^ x.1);
-                    block_to_bytes(x, &mut cipher[i + BLOCK_SIZE..]);
-                    i += BLOCK_SIZE;
-                }
-                cipher
-            }
+        let mut cipher_block = bytes_to_block(&cipher);
+        for i in (0..nbytes).step_by(BLOCK_SIZE) {
+            let plain_block = bytes_to_block(&plain[i..]);
+            let w0 = plain_block.0 ^ cipher_block.0;
+            let w1 = plain_block.1 ^ cipher_block.1;
+            cipher_block = self.encrypt(w0, w1);
+            block_to_bytes(cipher_block, &mut cipher[i + BLOCK_SIZE..]);
         }
+        cipher
     }
 
     /// Odszyfrowanie CBC.
     pub fn decrypt_cbc(&self, cipher: &[u8]) -> Vec<u8> {
         let nbytes = cipher.len();
         if nbytes < (2 * BLOCK_SIZE) {
-            return cipher.to_vec();
+            return vec![];
         }
         // Text wynikowy będzie krótszy co najmniej o blok IV.
         let mut plain = vec![0; nbytes - BLOCK_SIZE];
-        // Indeks ustawiamy za blokiem IV.
-        let mut i = BLOCK_SIZE;
         
-        let mut p = bytes_to_block(cipher);
-        while i < nbytes {
-            let x = bytes_to_block(&cipher[i..]);
-            let tmp = x;
-            let c = self.decrypt_block(x);
-            block_to_bytes((c.0 ^ p.0, c.1 ^ p.1), &mut plain[(i - BLOCK_SIZE)..]);
-            p = tmp;
-            i += BLOCK_SIZE;
+        let mut prv_cipher_block = bytes_to_block(cipher);
+        for i in (BLOCK_SIZE..nbytes).step_by(BLOCK_SIZE) {
+            let cipher_block = bytes_to_block(&cipher[i..]);
+            let tmp = cipher_block;
+            let plain_block = self.decrypt_block(cipher_block);
+            let w0 = plain_block.0 ^ prv_cipher_block.0;
+            let w1 = plain_block.1 ^ prv_cipher_block.1;
+            block_to_bytes((w0, w1), &mut plain[(i - BLOCK_SIZE)..]);
+            prv_cipher_block = tmp;
         }
 
-        if let Some(idx) = pad_index(&plain) {
-             plain = plain[..idx].to_vec();
+        match pad_index(&plain) {
+            Some(idx) => plain[..idx].to_vec(),
+            None => plain,
         }
-        plain
     }
 
 }   // end of impl
@@ -570,7 +565,7 @@ const ORIG_S: [[u32; 256]; 4] = [
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_block() {
         let plain = (1u32, 2u32);
@@ -578,17 +573,17 @@ mod tests {
 
         let key = "TESTKEY".as_bytes();
         let bf = Blowfish::new(key).unwrap();
-        
+
         let encrypted = bf.encrypt_block(plain);
         assert_eq!(encrypted, expected)
     }
-    
+
     #[test]
     fn test_ecb() {
         let key = rnd_bytes(Blowfish::max_size_key());
         let bf = Blowfish::new(&key);
         assert!(bf.is_ok());
-        
+
         let bf = bf.unwrap();
         let plain = [
             // "".as_bytes(),

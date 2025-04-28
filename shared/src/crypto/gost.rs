@@ -213,7 +213,7 @@ impl Gost {
     }
 
     pub fn decrypt_ecb(&self, cipher: &[u8]) -> Vec<u8> {
-        if cipher.is_empty() { return cipher.to_vec(); }
+        if cipher.is_empty() { return vec![]; }
         
         let nbytes = cipher.len();
         let mut plain = vec![0u8; nbytes];
@@ -225,7 +225,7 @@ impl Gost {
         }
 
         match pad_index(&plain) {
-            Some(idx) => plain[idx..].to_vec(),
+            Some(idx) => plain[..idx].to_vec(),
             None => plain,
         }
     }
@@ -237,7 +237,7 @@ impl Gost {
     ****************************************************************/
 
     pub fn encrypt_cbc(&self, input: &[u8]) -> Vec<u8> {
-        if input.is_empty() { return input.to_vec(); }
+        if input.is_empty() { return vec![]; }
 
         let iv = rnd_bytes(BLOCK_SIZE);
         let plain = align_to_block(input, BLOCK_SIZE);
@@ -245,10 +245,12 @@ impl Gost {
         let mut cipher = vec![0u8; nbytes + BLOCK_SIZE];
         cipher[0..BLOCK_SIZE].copy_from_slice(&iv);
 
-        let mut cipher_block = bytes_to_block(&iv);
+        let mut cipher_block = bytes_to_block(&cipher);
         for i in (0..nbytes).step_by(BLOCK_SIZE) {
             let plain_block = bytes_to_block(&plain[i..]);
-            cipher_block = self.encrypt(plain_block.0 ^ cipher_block.0, plain_block.1 ^ cipher_block.1);
+            let w0 = plain_block.0 ^ cipher_block.0;
+            let w1 = plain_block.1 ^ cipher_block.1;
+            cipher_block = self.encrypt(w0, w1);
             block_to_bytes(cipher_block, &mut cipher[(i + BLOCK_SIZE)..]);
         }
         cipher

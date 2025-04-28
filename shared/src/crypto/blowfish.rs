@@ -1,7 +1,9 @@
 #![allow(dead_code)]
-use crate::crypto::crypto::{align_to_block, block_to_bytes, bytes_to_block, pad_index, rnd_bytes};
+use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, pad_index, rnd_bytes};
 
 const BLOCK_SIZE: usize = 8;
+const MIN_KEY_SIZE: usize = 4;
+const MAX_KEY_SIZE: usize = 56;
 
 pub struct Blowfish {
     p: [u32; 18],
@@ -104,6 +106,13 @@ impl Blowfish {
         Ok(bf)
     }
 
+    pub fn min_key_size() -> usize {
+        MIN_KEY_SIZE
+    }
+    pub fn max_size_key() -> usize {
+        MAX_KEY_SIZE
+    }
+    
     /// Szyfrowanie jednego bloku 64 bit = tuple (u32,u32).
     fn encrypt_block(&self, x: (u32, u32)) -> (u32, u32) {
         self.encrypt(x.0, x.1)
@@ -228,10 +237,11 @@ impl Blowfish {
                     block_to_bytes(x, &mut plain[i..]);
                     i += BLOCK_SIZE;
                 }
-                if let Some(idx) = pad_index(&plain) {
-                    plain = plain[..idx].to_vec();
+                
+                match pad_index(&plain) {
+                    Some(idx) => plain[idx..].to_vec(),
+                    None => plain,
                 }
-                plain
             }
         }
     }
@@ -571,3 +581,36 @@ const ORIG_S: [[u32; 256]; 4] = [
         0xb74e6132, 0xce77e25b, 0x578fdfe3, 0x3ac372e6,
     ],
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_block() {
+        let plain = (1u32, 2u32);
+        let expected =  (0xdf333fd2u32, 0x30a71bb4u32);
+
+        let key = "TESTKEY".as_bytes();
+        let bf = Blowfish::new(key).unwrap();
+        
+        let encrypted = bf.encrypt_block(plain);
+        assert_eq!(encrypted, expected)
+    }
+    
+    #[test]
+    fn test_ecb() {
+        let key = rnd_bytes(Blowfish::max_size_key());
+        let bf = Blowfish::new(&key);
+        assert!(bf.is_ok());
+        
+        let bf = bf.unwrap();
+        let plain = [
+            "".as_bytes(),
+            "Piotr".as_bytes(),
+            "Piotr Włodzimierz Pszczółkowski".as_bytes(),
+            "Yamato & Musashi".as_bytes(),
+        ];
+    }
+    
+}

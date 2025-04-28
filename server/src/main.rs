@@ -63,10 +63,11 @@ fn main() {
     let key = "TESTKEY".as_bytes();
     let bf = Blowfish::new(key).unwrap();
     
-    let text = "Piotr Włodzimierz Pszczółkowski";
-    let cipher = bf.encrypt_ecb(text.as_bytes());
-    let plain = bf.decrypt_ecb(cipher.as_slice());
+    let text = "Piotr";
+    let cipher = bf.encrypt_cbc(text.as_bytes());
+    let plain = bf.decrypt_cbc(cipher.as_slice());
     assert_eq!(plain, text.as_bytes());
+    eprintln!("{:?}", String::from_utf8_lossy(plain.as_slice()));
     
     // let a = 1u32;
     // let b = 2u32;

@@ -34,6 +34,8 @@ fn main() -> io::Result<()>{
 
 fn handle_connection(mut socket: TcpStream) -> io::Result<()> {
     let mut conn = Connector::new(socket.try_clone()?, ConnectionSide::Client);
+    conn.init()?;
+    
     let mut input = String::new();
     loop {
         input.clear();

@@ -82,34 +82,46 @@ impl Connector {
     
     fn read_client_id(&mut self) -> io::Result<()> {
         let client_id = Message::read(&mut self.conn)?;
-        if client_id.len() != CLIENT_ID.len() {
-            return Err(Error::new(ErrorKind::InvalidData, "Invalid client-id length.")); 
+        let client_id = self.blowfish.decrypt_cbc(&client_id);
+        if client_id != CLIENT_ID {
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid client-id.")); 
         }
         Ok(())
     } // fn read_client_id
 
+    /// Serwer wysyła klucze szyfrowania dla GOST i 3-Way.
+    /// Te klucze są losowo generowane dla jednej, tej konkretnej, sesji.
     fn send_keys(&mut self) -> io::Result<()> {
         let gost_key = rnd_bytes(gost::KEY_SIZE);
         let way3_key = rnd_bytes(way3::KEY_SIZE);
         let mut keys = vec![];
-        keys.extend_from_slice(&gost_key);
-        keys.extend_from_slice(&way3_key);
-        Message::write(&mut self.conn, &keys)?;
-
-        self.gost = Some(Gost::new(&gost_key).unwrap());
-        self.way3 = Some(Way3::new(&way3_key).unwrap());
+        keys.extend_from_slice(gost_key.as_slice());
+        keys.extend_from_slice(way3_key.as_slice());
+        // Klucze szyfrujemy Blowfishem i wysyłamy do klienta.
+        let data = self.blowfish.encrypt_cbc(keys.as_slice());
+        Message::write(&mut self.conn, data.as_slice())?;
+        // Po udanym wysłaniu kluczy używamy ich do
+        // utworzenia silników szyfrowania po stronie serwera.
+        self.gost = Some(Gost::new(gost_key.as_slice()).unwrap());
+        self.way3 = Some(Way3::new(way3_key.as_slice()).unwrap());
         Ok(())
     } // fn send_keys
 
+    /// Klient odczytuje klucze szyfrowania dla GOST i 3-Way.
+    /// Serwer je losowo wygenerował na użytek tej sesji.
     fn read_keys(&mut self) -> io::Result<()> {
+        // Odczyt kluczy i ich odszyfrowanie Blowfishem.
         let keys = Message::read(&mut self.conn)?;
-        let gost_key = keys[..gost::KEY_SIZE].to_vec();
-        let way3_key = keys[gost::KEY_SIZE..].to_vec();
-        if gost_key.len() != gost::KEY_SIZE || way3_key.len() != way3::KEY_SIZE {
+        let keys = self.blowfish.decrypt_cbc(keys.as_slice());
+        if keys.len() != gost::KEY_SIZE + way3::KEY_SIZE {
             return Err(Error::new(ErrorKind::InvalidData, "Invalid keys length."));
         }
-        self.gost = Some(Gost::new(&gost_key).unwrap());
-        self.way3 = Some(Way3::new(&way3_key).unwrap());
+        // Po udanych odczycie kluczy używamy ich do
+        // utworzenia silników szyfrowania po stronie klienta.
+        let gost_key = keys[..gost::KEY_SIZE].to_vec();
+        let way3_key = keys[gost::KEY_SIZE..].to_vec();
+        self.gost = Some(Gost::new(gost_key.as_slice()).unwrap());
+        self.way3 = Some(Way3::new(way3_key.as_slice()).unwrap());
         Ok(())
     } // fn read_keys
 
@@ -121,10 +133,12 @@ impl Connector {
     }
     
     pub fn send_request(&mut self, request: Request) -> io::Result<()> {
-        Message::write(&mut self.conn, request.to_json()?.as_bytes())
+        let data = self.blowfish.encrypt_cbc(request.to_json()?.as_bytes());
+        Message::write(&mut self.conn, &data)
     }
     pub fn read_request(&mut self) -> io::Result<Request> {
-        let request = Message::read(&mut self.conn)?;
+        let data = Message::read(&mut self.conn)?;
+        let request = self.blowfish.decrypt_cbc(&data);
         Ok(Request::from_json(&request)?)
     }
     pub fn send_answer(&mut self, answer: Answer) -> io::Result<()> {
@@ -134,4 +148,19 @@ impl Connector {
         let answer = Message::read(&mut self.conn)?;
         Ok(Answer::from_json(&answer)?)
     }
-}
+    
+    /// Szyfrowanie: encrypt-decrypt-encrypt (Blowfish-GOST-Way3).
+    fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
+        let data = self.blowfish.encrypt_cbc(data);
+        let data = self.gost.as_ref().unwrap().decrypt_cbc(data.as_slice());
+        self.way3.as_ref().unwrap().encrypt_cbc(data.as_slice())
+    } // fn encrypt
+    
+    /// Odszyfrowanie: decrypt-encrypt-decrypt (Way3-GOST-Blowfish). 
+    fn decrypt(&mut self, data: &[u8]) -> Vec<u8> {
+        let data = self.way3.as_ref().unwrap().decrypt_cbc(data);
+        let data = self.gost.as_ref().unwrap().encrypt_cbc(data.as_slice());
+        self.blowfish.decrypt_cbc(data.as_slice())
+    } // fn decrypt
+    
+} // Connector

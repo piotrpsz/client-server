@@ -139,12 +139,26 @@ fn main() -> Result<(), Box<dyn Error>>{
 }
 
 fn handle_client(stream: &mut TcpStream, ctrl_receiver: Receiver<()>) {
-    let mut conn = Connector::new(stream.try_clone().unwrap(), ConnectionSide::Server);
-    let peer = conn.peer_addr();
+    
     
     TASK_COUNT.fetch_add(1, Relaxed);
     let task_id = TASK_ID.fetch_add(1, Relaxed);
+    
+    let mut conn = Connector::new(stream.try_clone().unwrap(), ConnectionSide::Server);
+    let peer = conn.peer_addr();
     eprintln!("Connected client {} (tid: {})", peer, task_id);
+    
+    match conn.init() {
+        Ok(_) => (),
+        Err(why) => {
+            stream.shutdown(Shutdown::Both).unwrap();
+            eprintln!("Task canceled with error {} (tid:{})", why, task_id);
+            TASK_COUNT.fetch_sub(1, Relaxed);
+            return;
+        }
+    }
+
+    
     
     loop {
         if ctrl_receiver.try_recv().is_ok() {

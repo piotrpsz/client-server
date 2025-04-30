@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+extern crate core;
+
 pub mod data;
 pub mod sqlite;
 pub mod crypto;

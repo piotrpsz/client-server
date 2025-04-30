@@ -9,7 +9,7 @@ use std::io::{Error, ErrorKind};
 use std::net::TcpStream;
 use crate::crypto::{blowfish, blowfish::Blowfish, gost, gost::Gost, way3, way3::Way3};
 use crate::crypto::tool::rnd_bytes;
-use crate::data::message::Message;
+use crate::data::{message::Message, request::Request, answer::Answer };
 
 const BF_KEY: [u8; blowfish::MAX_KEY_SIZE] = [
     0xbe, 0x2f, 0xe0, 0xa8, 0xd9, 0xc9, 0xec, 0x31, 0x06, 0x67,
@@ -58,29 +58,29 @@ impl Connector {
         }
     }
 
-    pub fn init(&mut self) -> Result<(),Error> {
+    pub fn init(&mut self) -> io::Result<()> {
         match self.side {
             ConnectionSide::Server => self.init_server(),
             ConnectionSide::Client => self.init_client()
         }
     } // fn init
     
-    fn init_server(&mut self) -> Result<(),Error> {
+    fn init_server(&mut self) -> io::Result<()> {
         self.read_client_id()?;
         self.send_keys()
     } // fn init_sever
     
-    fn init_client(&mut self) -> Result<(),Error> {
+    fn init_client(&mut self) -> io::Result<()> {
         self.send_client_id()?;
         self.read_keys()
     } // fn init_client
 
-    fn send_client_id(&mut self) -> Result<(),Error> {
+    fn send_client_id(&mut self) -> io::Result<()> {
         let data = self.blowfish.encrypt_cbc(&CLIENT_ID);
         Message::write(&mut self.conn, &data)
     } // fn send_client_id
     
-    fn read_client_id(&mut self) -> Result<(),Error> {
+    fn read_client_id(&mut self) -> io::Result<()> {
         let client_id = Message::read(&mut self.conn)?;
         if client_id.len() != CLIENT_ID.len() {
             return Err(Error::new(ErrorKind::InvalidData, "Invalid client-id length.")); 
@@ -88,7 +88,7 @@ impl Connector {
         Ok(())
     } // fn read_client_id
 
-    fn send_keys(&mut self) -> Result<(),Error> {
+    fn send_keys(&mut self) -> io::Result<()> {
         let gost_key = rnd_bytes(gost::KEY_SIZE);
         let way3_key = rnd_bytes(way3::KEY_SIZE);
         let mut keys = vec![];
@@ -101,7 +101,7 @@ impl Connector {
         Ok(())
     } // fn send_keys
 
-    fn read_keys(&mut self) -> Result<(), Error> {
+    fn read_keys(&mut self) -> io::Result<()> {
         let keys = Message::read(&mut self.conn)?;
         let gost_key = keys[..gost::KEY_SIZE].to_vec();
         let way3_key = keys[gost::KEY_SIZE..].to_vec();
@@ -112,4 +112,26 @@ impl Connector {
         self.way3 = Some(Way3::new(&way3_key).unwrap());
         Ok(())
     } // fn read_keys
+
+    pub fn peer_addr(&self) -> String {
+        self.conn.peer_addr().unwrap().to_string()
+    }
+    pub fn local_addr(&self) -> String {
+        self.conn.local_addr().unwrap().to_string()
+    }
+    
+    pub fn send_request(&mut self, request: Request) -> io::Result<()> {
+        Message::write(&mut self.conn, request.to_json()?.as_bytes())
+    }
+    pub fn read_request(&mut self) -> io::Result<Request> {
+        let request = Message::read(&mut self.conn)?;
+        Ok(Request::from_json(&request)?)
+    }
+    pub fn send_answer(&mut self, answer: Answer) -> io::Result<()> {
+        Message::write(&mut self.conn, answer.to_json()?.as_bytes())
+    }
+    pub fn read_answer(&mut self) -> io::Result<Answer> {
+        let answer = Message::read(&mut self.conn)?;
+        Ok(Answer::from_json(&answer)?)
+    }
 }

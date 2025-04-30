@@ -4,7 +4,7 @@ use std::error::Error;
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 use std::net::*;
-use std::thread;
+use std::{io, thread};
 use crossbeam_channel::{unbounded, bounded, Sender, Receiver, select};
 use shared::data::{
         message::Message,
@@ -18,11 +18,6 @@ use crate::executor::Executor;
 static STOP: AtomicBool = AtomicBool::new(false);
 static TASK_COUNT: AtomicU32 = AtomicU32::new(0);
 static TASK_ID: AtomicU32 = AtomicU32::new(0);
-
-struct TcpInfo {
-    addr: SocketAddr,
-    conn: TcpStream,
-}
 
 fn ctrlc_handler() -> Result<Receiver<()>, ctrlc::Error> {
     let (sender, receiver) = unbounded();
@@ -40,10 +35,10 @@ fn ctrlc_handler() -> Result<Receiver<()>, ctrlc::Error> {
     Ok(receiver)
 }
 
-fn accept(listener: &TcpListener, sender: Sender<TcpInfo>) {
+fn accept(listener: &TcpListener, sender: Sender<TcpStream>) {
     match listener.accept() {
-        Ok((conn, addr)) => {
-            sender.send(TcpInfo{addr, conn}).unwrap();
+        Ok(conn) => {
+            sender.send(conn.0).unwrap();
         }
         Err(e) => {
             eprintln!("Error accepting connection: {}", e);
@@ -93,7 +88,7 @@ fn main() {
 
 fn main() -> Result<(), Box<dyn Error>>{
     let ctrl_receiver = ctrlc_handler()?;
-    let (accept_sender, accept_receiver) = bounded::<TcpInfo>(1);
+    let (accept_sender, accept_receiver) = bounded::<TcpStream>(1);
     
     let addr = SocketAddr::from(([0, 0, 0, 0], 25105));
     let listener = TcpListener::bind(addr)?;
@@ -143,12 +138,13 @@ fn main() -> Result<(), Box<dyn Error>>{
     Ok(())
 }
 
-fn handle_client(tcp: &mut TcpInfo, ctrl_receiver: Receiver<()>) {
-    let conn = Connector::new(tcp.conn.try_clone().unwrap(), ConnectionSide::Server);
+fn handle_client(stream: &mut TcpStream, ctrl_receiver: Receiver<()>) {
+    let mut conn = Connector::new(stream.try_clone().unwrap(), ConnectionSide::Server);
+    let peer = conn.peer_addr();
     
     TASK_COUNT.fetch_add(1, Relaxed);
     let task_id = TASK_ID.fetch_add(1, Relaxed);
-    eprintln!("Connected client {} (tid: {})", tcp.addr, task_id);
+    eprintln!("Connected client {} (tid: {})", peer, task_id);
     
     loop {
         if ctrl_receiver.try_recv().is_ok() {
@@ -157,42 +153,25 @@ fn handle_client(tcp: &mut TcpInfo, ctrl_receiver: Receiver<()>) {
             return;
         }
         
-        match Message::read(&mut tcp.conn) {
-            Ok(buffer) => {
-                let request = Request::from_json(&buffer).unwrap();
-                println!("-- received request: {}", request.to_pretty_json().unwrap());
-                
-                
-                match Executor::execute(request) {
-                    Ok(answer) => {
-                        Message::write(&mut tcp.conn, answer.to_json().unwrap().as_bytes()).unwrap();
-                        println!("-- sent answer: {}", answer.to_pretty_json().unwrap());
-                    },
-                    Err(e) => {
-                        let mut answer = Answer::new(1, "ERROR".into());
-                        answer.data.push(e.to_string());
-                        let answer = answer.to_json().unwrap();
-                        Message::write(&mut tcp.conn, answer.as_bytes()).unwrap();
-                        eprintln!("** Error executing request: {}", e);
-                        
-                    }
-                }
-                
-                
-                // let answer = Answer::new(0, "OK".into()).to_json().unwrap();
-                // Message::write(&mut tcp.conn, answer.as_bytes()).unwrap();
-                // println!("-- sent answer: {:?}", answer);
-            }
-            Err(e) => {
-                match e.kind() {
-                    ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe => 
-                        eprintln!("Client {} disconnected (tid: {})", tcp.addr, task_id),
-                    _ => 
-                        eprintln!("** Error reading data: {}", e)
+        match one_loop(&mut conn) {  
+            Ok(_) => (),
+            Err(why) => {
+                if why.kind() == ErrorKind::BrokenPipe || why.kind() == ErrorKind::UnexpectedEof {
+                    eprintln!("Client {} disconnected (tid: {})", peer, task_id);
+                } else {
+                    eprintln!("** Error executing: {}", why);
                 }
                 TASK_COUNT.fetch_sub(1, Relaxed);
                 return;
             }
         }
     }
+}
+
+fn one_loop(conn: &mut Connector) -> io::Result<()> {
+    let request = conn.read_request()?;
+    eprintln!("-- received request: {}", request.to_pretty_json()?);
+    let answer = Executor::execute(request)?;
+    eprintln!("-- sent answer: {}", answer.to_pretty_json()?);
+    conn.send_answer(answer)
 }

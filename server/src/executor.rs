@@ -9,7 +9,7 @@ static SEPERATOR: &str = "/";
 pub struct Executor;
 
 impl Executor {
-    pub fn execute(request: Request) -> Result<Answer, io::Error> {
+    pub fn execute(request: Request) -> io::Result<Answer> {
         match request.command.as_str() {
             "pwd" => Self::pwd(),
             "cd" => Self::cd(request.params),
@@ -19,7 +19,7 @@ impl Executor {
         }
     }
     
-    fn pwd() -> Result<Answer, io::Error> {
+    fn pwd() -> io::Result<Answer> {
         match env::current_dir() {
             Ok(path) => {
                 let mut answer = Answer::new(0, "OK".into());
@@ -30,7 +30,7 @@ impl Executor {
         }
     }
 
-    fn cd(params: Vec<String>) -> Result<Answer, io::Error> {
+    fn cd(params: Vec<String>) -> io::Result<Answer> {
         let mut path = match params.is_empty() {
             true => "~".to_string(),
             false => params[0].clone()
@@ -49,7 +49,7 @@ impl Executor {
             }
         }
     
-        fn mkdir(params: Vec<String>) -> Result<Answer, io::Error> {
+        fn mkdir(params: Vec<String>) -> io::Result<Answer> {
             if params.is_empty() {
                 return Err(io::Error::new(io::ErrorKind::InvalidData, "No call parameters"));
             }
@@ -63,7 +63,7 @@ impl Executor {
             Ok(Answer::new(0, "OK".into()))       
         }
     
-        fn readdir(params: Vec<String>) -> Result<Answer, io::Error> {
+        fn readdir(params: Vec<String>) -> io::Result<Answer> {
             let dir = match params.is_empty() {
                 true => ".".to_string(),
                 false => params[0].clone()
@@ -77,4 +77,3 @@ impl Executor {
             Ok(Answer::new_with_data(0, "OK".into(), data))
         }
     }
-

@@ -33,7 +33,7 @@ fn main() -> io::Result<()>{
 }
 
 fn handle_connection(mut socket: TcpStream) -> io::Result<()> {
-    let conn = Connector::new(socket.try_clone()?, ConnectionSide::Client);
+    let mut conn = Connector::new(socket.try_clone()?, ConnectionSide::Client);
     let mut input = String::new();
     loop {
         input.clear();
@@ -50,14 +50,13 @@ fn handle_connection(mut socket: TcpStream) -> io::Result<()> {
         for token in tokens[1..].iter() {
             args.push(token.to_string());       
         }
-                
-        let request = Request::new(command.into(), args);
-        Message::write(&mut socket, request.to_json().unwrap().as_bytes())?;
-        println!("-- sent: {}", request.to_pretty_json()?);
+
         
-        let answer = Message::read(&mut socket)?;
-        let answer = Answer::from_json(&answer);
-        println!("-- received: {}", answer?.to_pretty_json()?);
+        let request = Request::new(command.into(), args);
+        conn.send_request(request)?;
+
+        let answer = conn.read_answer()?;
+        println!("-- received: {}", answer.to_pretty_json()?);
     }
     Ok(())
 }

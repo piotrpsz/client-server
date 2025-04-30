@@ -2,8 +2,8 @@
 use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, pad_index, rnd_bytes};
 
 const BLOCK_SIZE: usize = 8;
-const MIN_KEY_SIZE: usize = 4;
-const MAX_KEY_SIZE: usize = 56;
+pub const MIN_KEY_SIZE: usize = 4;
+pub const MAX_KEY_SIZE: usize = 56;
 
 pub struct Blowfish {
     p: [u32; 18],

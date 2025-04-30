@@ -7,8 +7,14 @@ use std::io;
 use std::io::{ stdin, ErrorKind};
 use std::net::*;
 use shared::data::message::Message;
+use shared::net::connector::{ConnectionSide, Connector};
 
 fn main() -> io::Result<()>{
+    // use shared::crypto::tool::rnd_bytes;
+    // use shared::crypto::blowfish;
+    // let key = rnd_bytes(128);
+    // eprintln!("{:02x?}", key);
+    
     let addr = SocketAddr::from(([127, 0, 0, 1], 25105));
     match TcpStream::connect(addr) {
         Ok(socket) => {
@@ -27,6 +33,7 @@ fn main() -> io::Result<()>{
 }
 
 fn handle_connection(mut socket: TcpStream) -> io::Result<()> {
+    let conn = Connector::new(socket.try_clone()?, ConnectionSide::Client);
     let mut input = String::new();
     loop {
         input.clear();

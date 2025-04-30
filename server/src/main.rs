@@ -12,7 +12,7 @@ use shared::data::{
         answer::Answer
 };
 use shared::crypto::blowfish::Blowfish;
-
+use shared::net::connector::{ConnectionSide, Connector};
 use crate::executor::Executor;
 
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -51,6 +51,7 @@ fn accept(listener: &TcpListener, sender: Sender<TcpInfo>) {
     }
 }
 
+/*
 fn main() {
     // use shared::crypto::crypto;
     // let data = vec![1u8, 12, 3, 14, 5, 6, 17, 8, 9, 10];
@@ -88,7 +89,8 @@ fn main() {
     // }
 
 }
-/*
+*/
+
 fn main() -> Result<(), Box<dyn Error>>{
     let ctrl_receiver = ctrlc_handler()?;
     let (accept_sender, accept_receiver) = bounded::<TcpInfo>(1);
@@ -140,8 +142,10 @@ fn main() -> Result<(), Box<dyn Error>>{
     
     Ok(())
 }
-*/
+
 fn handle_client(tcp: &mut TcpInfo, ctrl_receiver: Receiver<()>) {
+    let conn = Connector::new(tcp.conn.try_clone().unwrap(), ConnectionSide::Server);
+    
     TASK_COUNT.fetch_add(1, Relaxed);
     let task_id = TASK_ID.fetch_add(1, Relaxed);
     eprintln!("Connected client {} (tid: {})", tcp.addr, task_id);

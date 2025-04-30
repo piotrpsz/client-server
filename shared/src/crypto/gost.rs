@@ -2,7 +2,7 @@ use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, pad_in
 
 const BLOCK_SIZE: usize = 8;
 // 8 bytes = 2 u32 = 54 bit
-const KEY_SIZE: usize = 32;
+pub const KEY_SIZE: usize = 32;
 // 32 bytes = 8 u32 = 256 bit
 const K8: [u8; 16] = [14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7];
 const K7: [u8; 16] = [15, 1, 8, 14, 6, 11, 3, 4, 9, 7, 2, 13, 12, 0, 5, 10];

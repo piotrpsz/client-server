@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+
 use rand::RngCore;
 
 pub(crate) fn padding(nbytes: usize) -> Vec<u8> {
@@ -31,7 +32,7 @@ pub(crate) fn pad_index(data: &[u8]) -> Option<usize> {
     None
 }
 
-pub (crate) fn rnd_bytes(nbytes: usize) -> Vec<u8> {
+pub fn rnd_bytes(nbytes: usize) -> Vec<u8> {
     let mut buffer = vec![0u8; nbytes];
     rand::rng().fill_bytes(&mut buffer);
     buffer
@@ -59,6 +60,14 @@ pub(crate) fn align_to_block(input: &[u8], block_size: usize) -> Vec<u8> {
 }
 
 pub(crate) fn bytes_to_block3(data: &[u8]) -> (u32,u32,u32) {
+    let chunks = data.chunks(4).collect::<Vec<_>>();
+    let mut retv: Vec<u32> = vec![];
+    for chunk in chunks.iter() {
+        let value = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        retv.push(value);    
+    }
+    (retv[0], retv[1], retv[2])
+/*    
     unsafe {
         let ptr = data.as_ptr() as *const u32;
         let a = *ptr.offset(0);
@@ -66,13 +75,15 @@ pub(crate) fn bytes_to_block3(data: &[u8]) -> (u32,u32,u32) {
         let c = *ptr.offset(2);
         (a,b,c)   
     }
+    
+ */
 }
 
-pub(crate) fn block_to_bytes(blk: (u32, u32), data: &mut [u8]) {
+pub(crate) fn block_to_bytes(block: (u32, u32), data: &mut [u8]) {
     unsafe {
         let dst = data.as_mut_ptr();
-        let src0 = &blk.0 as *const u32 as *const u8;
-        let src1 = &blk.1 as *const u32 as *const u8;
+        let src0 = &block.0 as *const u32 as *const u8;
+        let src1 = &block.1 as *const u32 as *const u8;
         
         *dst.offset(0) = *src0.offset(0);
         *dst.offset(1) = *src0.offset(1);
@@ -87,6 +98,11 @@ pub(crate) fn block_to_bytes(blk: (u32, u32), data: &mut [u8]) {
 }
 
 pub(crate) fn block3_to_bytes(block: (u32, u32, u32), data: &mut [u8]) {
+    data[..4].copy_from_slice(&block.0.to_be_bytes());
+    data[4..8].copy_from_slice(&block.1.to_be_bytes());
+    data[8..].copy_from_slice(&block.2.to_be_bytes());
+    
+    /*
     unsafe {
         let dst = data.as_mut_ptr();
         let src0 = &block.0 as *const u32 as *const u8;
@@ -108,4 +124,6 @@ pub(crate) fn block3_to_bytes(block: (u32, u32, u32), data: &mut [u8]) {
         *dst.offset(10) = *src2.offset(2);
         *dst.offset(11) = *src2.offset(3);
     }
+   
+     */
 }

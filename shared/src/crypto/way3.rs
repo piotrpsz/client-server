@@ -11,7 +11,7 @@ use crate::crypto::tool::{
 
 const NMBR: usize = 11;             // Liczba rund
 const BLOCK_SIZE: usize = 12;       // 3xu32: 12 bajtów
-const KEY_SIZE: usize = 12;         // Rozmiar klucza jako liczba bajtów.
+pub const KEY_SIZE: usize = 12;         // Rozmiar klucza jako liczba bajtów.
 const ERCON: [u32; 12] = [0x0b0b, 0x1616, 0x2c2c, 0x5858, 0xb0b0, 0x7171, 0xe2e2, 0xd5d5, 0xbbbb, 0x6767, 0xcece, 0x8d8d];
 const DRCON: [u32; 12] = [0xb1b1, 0x7373, 0xe6e6, 0xdddd, 0xabab, 0x4747, 0x8e8e, 0x0d0d, 0x1a1a, 0x3434, 0x6868, 0xd0d0];
 
@@ -22,13 +22,6 @@ pub struct Way3 {
 
 impl Way3 {
     pub fn new_with_key_block(block: (u32, u32, u32)) -> Result<Self, &'static str> {
-        // let ptr = key.as_ptr() as *const u8;
-        // let mut k = [0u8; KEY_SIZE];
-        // unsafe {
-        //     for i in 0..KEY_SIZE {
-        //         k[i] = *ptr.add(i);
-        //     }
-        // }
         let mut key = vec![0u8; KEY_SIZE];
         block3_to_bytes(block, &mut key);
         Self::new(key.as_slice())
@@ -66,17 +59,17 @@ impl Way3 {
     pub fn encrypt_block(&self, src: (u32,u32,u32)) -> (u32,u32,u32) {
         let mut a = [src.0, src.1, src.2];
 
-        for i in 0..NMBR {
-            a[0] ^= self.k[0] ^ (ERCON[i] << 16);
+        for v in &ERCON[..NMBR] {
+            a[0] ^= self.k[0] ^ (v << 16);
             a[1] ^= self.k[1];
-            a[2] ^= self.k[2] ^ ERCON[i];
-            Self::rho(&mut a);
+            a[2] ^= self.k[2] ^ v;
+            Self::rho(&mut a);       
         }
         a[0] ^= self.k[0] ^ (ERCON[NMBR] << 16);
         a[1] ^= self.k[1];
         a[2] ^= self.k[2] ^ ERCON[NMBR];
-
         Self::theta(&mut a);
+        
         (a[0], a[1], a[2])
     }
 
@@ -84,17 +77,17 @@ impl Way3 {
         let mut a = [src.0, src.1, src.2];
         Self::mu(&mut a);
 
-        for i in 0..NMBR {
-            a[0] ^= self.ki[0] ^ (DRCON[i] << 16);
+        for v in &DRCON[..NMBR] {
+            a[0] ^= self.ki[0] ^ (v << 16);
             a[1] ^= self.ki[1];
-            a[2] ^= self.ki[2] ^ DRCON[i];
+            a[2] ^= self.ki[2] ^ v;
             Self::rho(&mut a);
         }
         a[0] ^= self.ki[0] ^ (DRCON[NMBR] << 16);
         a[1] ^= self.ki[1];
         a[2] ^= self.ki[2] ^ DRCON[NMBR];
-
         Self::mu(Self::theta(&mut a));
+
         (a[0], a[1], a[2])
     }
 
@@ -106,6 +99,7 @@ impl Way3 {
 
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
+        eprintln!("{:?}", input.len());       
 
         let plain = align_to_block(input, BLOCK_SIZE);
         let nbytes = plain.len();
@@ -114,7 +108,7 @@ impl Way3 {
         for i in (0..nbytes).step_by(BLOCK_SIZE) {
             let plain_block = bytes_to_block3(&plain[i..]);
             let cipher_block = self.encrypt_block(plain_block);
-            block3_to_bytes(cipher_block, &mut cipher[i..]);
+            block3_to_bytes(cipher_block, &mut cipher[i..i+BLOCK_SIZE]);
         }
 
         cipher
@@ -129,7 +123,7 @@ impl Way3 {
         for i in (0..nbytes).step_by(BLOCK_SIZE) {
             let cipher_block = bytes_to_block3(&cipher[i..]);
             let plain_block = self.decrypt_block(cipher_block);
-            block3_to_bytes(plain_block, &mut plain[i..]);
+            block3_to_bytes(plain_block, &mut plain[i..i+BLOCK_SIZE]);
         }
 
         match pad_index(&plain) {
@@ -160,7 +154,7 @@ impl Way3 {
             let w1 = plain_block.1 ^ cipher_block.1;
             let w2 = plain_block.2 ^ cipher_block.2;
             cipher_block = self.encrypt_block((w0, w1, w2));
-            block3_to_bytes(cipher_block, &mut cipher[i+BLOCK_SIZE..]);       
+            block3_to_bytes(cipher_block, &mut cipher[i+BLOCK_SIZE..i+2*BLOCK_SIZE]);
         }
         
         cipher
@@ -279,7 +273,7 @@ impl Way3 {
         Self::pi2(Self::gamma(Self::pi1(Self::theta(data))))
     }
 
-}
+}   // Way3
 
 #[cfg(test)]
 mod tests {
@@ -321,9 +315,7 @@ mod tests {
         let w3 = Way3::new(&key).unwrap();
         let plain = "Piotr Pszczółkowski".as_bytes();
         let cipher = w3.encrypt_ecb(plain);
-        eprintln!("{:x?}", cipher);
         let decrypted = w3.decrypt_ecb(&cipher);
-        eprintln!("{:x?}", decrypted);
         assert_eq!(plain, &decrypted);
     }
 
@@ -339,4 +331,5 @@ mod tests {
         let decrypted = w3.decrypt_cbc(&cipher);
         assert_eq!(plain, &decrypted);
     }
+    
 }

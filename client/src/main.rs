@@ -1,12 +1,10 @@
 use shared::data::{
-    answer::Answer,
     request::Request
 };
 
 use std::io;
 use std::io::{ stdin, ErrorKind};
 use std::net::*;
-use shared::data::message::Message;
 use shared::net::connector::{ConnectionSide, Connector};
 
 fn main() -> io::Result<()>{
@@ -32,8 +30,8 @@ fn main() -> io::Result<()>{
     Ok(())
 }
 
-fn handle_connection(mut socket: TcpStream) -> io::Result<()> {
-    let mut conn = Connector::new(socket.try_clone()?, ConnectionSide::Client);
+fn handle_connection(stream: TcpStream) -> io::Result<()> {
+    let mut conn = Connector::new(stream.try_clone()?, ConnectionSide::Client);
     conn.init()?;
     
     let mut input = String::new();

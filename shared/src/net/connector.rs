@@ -45,6 +45,9 @@ pub struct Connector {
     blowfish: Blowfish,
     gost: Option<Gost>,
     way3: Option<Way3>,
+    prv_request: Option<Request>,
+    prv_answer: Option<Answer>,
+        
 }
 
 impl Connector {
@@ -55,6 +58,8 @@ impl Connector {
             blowfish: Blowfish::new(BF_KEY.as_slice()).unwrap(),
             gost: None,
             way3: None,
+            prv_request: None,
+            prv_answer: None,
         }
     }
 
@@ -132,23 +137,59 @@ impl Connector {
         self.conn.local_addr().unwrap().to_string()
     }
     
-    pub fn send_request(&mut self, request: Request) -> io::Result<()> {
-        let data = self.blowfish.encrypt_cbc(request.to_json()?.as_bytes());
-        Message::write(&mut self.conn, &data)
-    }
+    
+    // Serwer
+    
+    /// Odczytanie żądania.
+    /// Żądanie zapamiętujemy?
     pub fn read_request(&mut self) -> io::Result<Request> {
         let data = Message::read(&mut self.conn)?;
         let request = self.blowfish.decrypt_cbc(&data);
-        Ok(Request::from_json(&request)?)
-    }
-    pub fn send_answer(&mut self, answer: Answer) -> io::Result<()> {
-        Message::write(&mut self.conn, answer.to_json()?.as_bytes())
-    }
-    pub fn read_answer(&mut self) -> io::Result<Answer> {
-        let answer = Message::read(&mut self.conn)?;
-        Ok(Answer::from_json(&answer)?)
+        let request = Request::from_json(&request)?;
+        // TODO sprawdzić czy ID jest prawidłowe. 
+        self.prv_request = Some(request.clone());
+        Ok(request)
     }
     
+    /// Wysłanie zapytania.
+    /// Przed wysłaniem zapytania musimy uzupełnić ID.
+    /// Numer ID pobieramy z poprzedniego zapytania. 
+    /// Wysłane zapytanie zapamiętujemy.
+    pub fn send_answer(&mut self, mut answer: Answer) -> io::Result<()> {
+        let id = match self.prv_request {
+            Some(ref request) => request.id(),
+            None => 0 };
+        answer.set_id(id + 1);
+        let data = self.blowfish.encrypt_cbc(answer.to_json()?.as_bytes());
+        Message::write(&mut self.conn, data.as_slice())?;
+        self.prv_answer = Some(answer);
+        Ok(())
+    }
+
+    // Klient
+    
+    pub fn send_request(&mut self, mut request: Request) -> io::Result<()> {
+        let id = match self.prv_answer {
+            Some(ref request) => request.id(),
+            None => 0 };
+        request.set_id(id + 1);
+        let data = self.blowfish.encrypt_cbc(request.to_json()?.as_bytes());
+        Message::write(&mut self.conn, data.as_slice())?;
+        // Jeśli zapis się zakończył sukcesem, zapamiętujemy to żądanie. 
+        self.prv_request = Some(request);
+        Ok(())
+    }
+    
+    pub fn read_answer(&mut self) -> io::Result<Answer> {
+        let data = Message::read(&mut self.conn)?;
+        let answer = self.blowfish.decrypt_cbc(&data);
+        let answer = Answer::from_json(&answer)?;
+        // TODO: sprawdzić czy ID i timestamp są właściwe.
+        // Jeśli wszystko poszło dobrze, zapamiętujemy odpowiedź.
+        self.prv_answer = Some(answer.clone());
+        Ok(answer)
+    }
+     
     /// Szyfrowanie: encrypt-decrypt-encrypt (Blowfish-GOST-Way3).
     fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
         let data = self.blowfish.encrypt_cbc(data);

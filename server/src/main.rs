@@ -6,12 +6,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 use std::net::*;
 use std::{io, thread};
 use crossbeam_channel::{unbounded, bounded, Sender, Receiver, select};
-use shared::data::{
-        message::Message,
-        request::Request,
-        answer::Answer
-};
-use shared::crypto::blowfish::Blowfish;
 use shared::net::connector::{ConnectionSide, Connector};
 use crate::executor::Executor;
 

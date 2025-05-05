@@ -6,6 +6,7 @@ use shared::data::{
 };
 
 use shared::ufs::dir::Dir;
+use shared::ufs::Error;
 use shared::ufs::file::File;
 
 static SEPERATOR: &str = "/";
@@ -129,7 +130,35 @@ impl Executor {
     }
     
     fn rmdir(params: Vec<String>) -> io::Result<Answer>{
-        unimplemented!()
+        match params[0].as_str() {
+            "-r" => Self::rmdir_recursive(&params[1..]),
+            _ => Self::rmdir_empty_directory(params.as_slice())
+        }
+    }
+
+    fn rmdir_empty_directory(paths: &[String]) -> io::Result<Answer> {
+        fn validate_path(path: &str) -> io::Result<()> {
+            match path {
+                "." | ".."  => Err(io::Error::new(io::ErrorKind::InvalidInput, "Cannot remove current or parent directory")),
+                _ => Ok(())
+            }
+        }
+
+        let mut removed = vec![]; 
+        for path in paths {
+            validate_path(path)?;
+            Dir::rmdir(path)?;
+            removed.push(path.clone());
+        }
+        
+        Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
+    }
+    
+    fn rmdir_recursive(params: &[String]) -> io::Result<Answer> {
+        if params.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "No call parameters"));
+        }
+        Ok(Answer::new(0, "OK", "rmdir"))
     }
 }
 

@@ -76,7 +76,7 @@ fn display_answer(answer: Answer) {
     }
 }
 
-fn print_pwd_answer(data: Vec<String>) { 
+fn print_pwd_answer(data: Vec<String>) {
     println!("{}", data[0]);
 }
 
@@ -98,7 +98,9 @@ fn print_lsa_answer(data: Vec<String>) {
 }
 
 fn print_rmdir_answer(data: Vec<String>) {
-    println!("{}", data[0]);
+    for item in data {
+        println!("{}", item);
+    }
 }
 
 fn print_error(answer: Answer) {

@@ -2,6 +2,7 @@ use std::option::Option;
 use std::ffi::CStr;
 use std::fmt::Display;
 use std::io;
+use std::io::ErrorKind::Other;
 use serde_json;
 
 pub mod dir;
@@ -32,7 +33,7 @@ impl Error {
 
 impl From<Error> for io::Error {
     fn from(err: Error) -> io::Error {
-        io::Error::new(err.kind.unwrap(), err.message)
+        io::Error::new(Other, err.message)
     }   
 }
 

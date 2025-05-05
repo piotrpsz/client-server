@@ -123,6 +123,16 @@ impl Dir {
             }
         }
     }
+    
+    pub fn rmdir(path: &str) -> Result<()> {
+        unsafe {
+            let c_path = CString::new(path).unwrap();
+            match libc::rmdir(c_path.as_ptr()) {
+                0 => Ok(()),
+                _ => Err(Error::from_errno()),
+            }
+        }
+    }
 }
 
 

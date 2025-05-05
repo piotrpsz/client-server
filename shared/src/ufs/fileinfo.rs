@@ -273,7 +273,7 @@ impl Debug for FileInfo {
 /// Display trait dla obiektu.
 impl std::fmt::Display for FileInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = format!("{} {} {} {:6} {} {}",
+        let str = format!("{} {:6} {:6} {:6} {} {}",
                           self.permissions,
                           self.owner_name,
                           self.group_name,

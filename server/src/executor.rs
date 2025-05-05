@@ -151,6 +151,16 @@ impl Executor {
             removed.push(path.clone());
         }
         
+        // let removed: io::Result<Vec<String>> = paths
+        //     .iter()
+        //     .map(|path| {
+        //         // validate_path(path)?;
+        //         Dir::rmdir(path)
+        //             .map_err(|_| { Err(Error::from_errno()) })
+        //             .map(|_| { Ok(path.clone()) })
+        //     })        
+        //     .collect();
+        
         Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
     }
     

@@ -11,25 +11,28 @@ pub struct Answer {
     timestamp: u64,
     pub code: i32,
     pub message: String,
+    pub cmd: String,
     pub data: Vec<String>
 }
 
 impl Answer {
-    pub fn new(code: i32, message: String) -> Self {
+    pub fn new(code: i32, message: &str, cmd: &str) -> Self {
         Self {
             id: 0,
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
             code,
-            message,
+            message: message.into(),
+            cmd: cmd.into(),
             data: Vec::new()
         }
     }
-    pub fn new_with_data(code: i32, message: String, data: Vec<String>) -> Self {
+    pub fn new_with_data(code: i32, message: &str, cmd: &str, data: Vec<String>) -> Self {
         Self {
             id: 0,
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
             code,
-            message,
+            message: message.into(),
+            cmd: cmd.into(),
             data
         }
     }
@@ -58,6 +61,10 @@ impl Answer {
 
 impl Debug for Answer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Answer {{ code: {}, message: {}, data: {:?} }}", self.code, self.message, self.data)
+        write!(f, "Answer {{ code: {}, message: {}, command: {}, data: {:?} }}", 
+               self.code, 
+               self.message, 
+               self.cmd, 
+               self.data)
     }
 }

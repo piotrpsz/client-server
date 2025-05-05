@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 use std::net::*;
 use std::{io, thread};
 use crossbeam_channel::{unbounded, bounded, Sender, Receiver, select};
+use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
+use shared::ufs;
 use crate::executor::Executor;
 
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -133,8 +135,6 @@ fn main() -> Result<(), Box<dyn Error>>{
 }
 
 fn handle_client(stream: &mut TcpStream, ctrl_receiver: Receiver<()>) {
-    
-    
     TASK_COUNT.fetch_add(1, Relaxed);
     let task_id = TASK_ID.fetch_add(1, Relaxed);
     
@@ -151,8 +151,6 @@ fn handle_client(stream: &mut TcpStream, ctrl_receiver: Receiver<()>) {
             return;
         }
     }
-
-    
     
     loop {
         if ctrl_receiver.try_recv().is_ok() {
@@ -176,10 +174,29 @@ fn handle_client(stream: &mut TcpStream, ctrl_receiver: Receiver<()>) {
     }
 }
 
+/// Jedna sekwencja zapytanie-odpowiedź.
+/// Dla na błąd wykonania polecenia nie jest błędem.
+/// Dla nas błędem są problemy komunikacji z klientem.
 fn one_loop(conn: &mut Connector) -> io::Result<()> {
     let request = conn.read_request()?;
     eprintln!("-- received request: {}", request.to_pretty_json()?);
-    let answer = Executor::execute(request)?;
-    eprintln!("-- sent answer: {}", answer.to_pretty_json()?);
-    conn.send_answer(answer)
+    
+    match Executor::execute(request) {
+        Ok(answer) => {
+            conn.send_answer(answer)?;
+            eprintln!("-- sent answer: OK");
+            Ok(())
+        },
+        Err(err) => {
+            let code = err.raw_os_error().unwrap_or(-1);
+            let message = err.to_string();
+            let kind = err.kind().to_string();
+            
+            let answer = Answer::new_with_data(code, "ERROR", "rm", vec![message, kind]);
+            match conn.send_answer(answer) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e)
+            }
+        }
+    }
 }

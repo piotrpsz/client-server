@@ -5,14 +5,11 @@ use shared::data::{
 use std::io;
 use std::io::{ stdin, ErrorKind};
 use std::net::*;
+use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
+use shared::ufs::fileinfo::FileInfo;
 
 fn main() -> io::Result<()>{
-    // use shared::crypto::tool::rnd_bytes;
-    // use shared::crypto::blowfish;
-    // let key = rnd_bytes(128);
-    // eprintln!("{:02x?}", key);
-    
     let addr = SocketAddr::from(([127, 0, 0, 1], 25105));
     match TcpStream::connect(addr) {
         Ok(socket) => {
@@ -37,7 +34,7 @@ fn handle_connection(stream: TcpStream) -> io::Result<()> {
     let mut input = String::new();
     loop {
         input.clear();
-        eprint!("Give command: ");
+        eprint!("cmd> ");
         stdin().read_line(&mut input)?;
         input = input.trim().to_string();
         if input.is_empty() {
@@ -51,12 +48,57 @@ fn handle_connection(stream: TcpStream) -> io::Result<()> {
             args.push(token.to_string());       
         }
 
+        //===========================================================
         
         let request = Request::new(command.into(), args);
         conn.send_request(request)?;
 
         let answer = conn.read_answer()?;
-        println!("-- received: {}", answer.to_pretty_json()?);
+        display_answer(answer);
+        // println!("-- received: {}", answer.to_pretty_json()?);
     }
     Ok(())
+}
+
+fn display_answer(answer: Answer) {
+    match answer.message.as_str() {
+        "OK" => {
+            match answer.cmd.as_str() {
+                "pwd" => print_pwd_answer(answer.data),
+                "cd" => print_cd_answer(answer.data),
+                "mkdir" => print_mkdir_answer(answer.data),
+                "ls" | "la" => print_lsa_answer(answer.data),
+                _ => eprintln!("{:?}", answer),
+            }
+        },
+        _ => print_error(answer)
+    }
+}
+
+fn print_pwd_answer(data: Vec<String>) { 
+    println!("{}", data[0]);
+}
+
+fn print_cd_answer(data: Vec<String>) {
+    println!("{}", data[0]);
+}
+
+fn print_mkdir_answer(data: Vec<String>) {
+    for item in data {
+        println!("{}", item);
+    }
+}
+
+fn print_lsa_answer(data: Vec<String>) {
+    for item in data {
+        let fi = FileInfo::from_json(item.as_bytes()).unwrap();
+        println!("{}", fi);
+    }
+}
+
+fn print_error(answer: Answer) {
+    if !answer.data.is_empty() {
+        let text = format!("{}: {} (kind: {})", answer.message, answer.data[0], answer.data[1]);
+        println!("{:?}", text);
+    }
 }

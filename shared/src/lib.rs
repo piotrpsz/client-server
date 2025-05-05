@@ -4,8 +4,8 @@ extern crate core;
 pub mod data;
 pub mod sqlite;
 pub mod crypto;
-pub mod filesystem;
 pub mod net;
+pub mod ufs;
 
 // #[macro_export]
 // macro_rules! fpos {

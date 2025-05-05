@@ -137,8 +137,7 @@ impl Connector {
         self.conn.local_addr().unwrap().to_string()
     }
     
-    
-    // Serwer
+    //------- Serwer ------------------------------------------------
     
     /// Odczytanie żądania.
     /// Żądanie zapamiętujemy?
@@ -146,10 +145,12 @@ impl Connector {
         let data = Message::read(&mut self.conn)?;
         let request = self.blowfish.decrypt_cbc(&data);
         let request = Request::from_json(&request)?;
-        // TODO sprawdzić czy ID jest prawidłowe. 
+        if self.prv_answer.is_some() && request.id() != (self.prv_answer.as_ref().unwrap().id() + 1) {
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid request id."));
+        }
         self.prv_request = Some(request.clone());
         Ok(request)
-    }
+    } // fn read_request
     
     /// Wysłanie zapytania.
     /// Przed wysłaniem zapytania musimy uzupełnić ID.
@@ -164,9 +165,9 @@ impl Connector {
         Message::write(&mut self.conn, data.as_slice())?;
         self.prv_answer = Some(answer);
         Ok(())
-    }
+    } // fn send_answer
 
-    // Klient
+    //------- Klient ------------------------------------------------
     
     pub fn send_request(&mut self, mut request: Request) -> io::Result<()> {
         let id = match self.prv_answer {
@@ -178,17 +179,19 @@ impl Connector {
         // Jeśli zapis się zakończył sukcesem, zapamiętujemy to żądanie. 
         self.prv_request = Some(request);
         Ok(())
-    }
+    } // fn send_request
     
     pub fn read_answer(&mut self) -> io::Result<Answer> {
         let data = Message::read(&mut self.conn)?;
         let answer = self.blowfish.decrypt_cbc(&data);
         let answer = Answer::from_json(&answer)?;
-        // TODO: sprawdzić czy ID i timestamp są właściwe.
+        if self.prv_answer.is_some() && answer.id() != (self.prv_request.as_ref().unwrap().id() + 1) {
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid answer id."));
+        }
         // Jeśli wszystko poszło dobrze, zapamiętujemy odpowiedź.
         self.prv_answer = Some(answer.clone());
         Ok(answer)
-    }
+    } // fn read_answer
      
     /// Szyfrowanie: encrypt-decrypt-encrypt (Blowfish-GOST-Way3).
     fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {

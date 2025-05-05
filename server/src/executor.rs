@@ -21,7 +21,7 @@ impl Executor {
             "la" => Self::la(request.params),
             "touch" => Self::touch(request.params),
             "rm" => Self::rm(request.params),
-            "rmdir" => unimplemented!(),
+            "rmdir" => Self::rmdir(request.params),
             _ => Err(io::Error::new(io::ErrorKind::Other, "Command not found"))
         }
     }
@@ -108,18 +108,28 @@ impl Executor {
     
     /// Utworzenie pustego pliku.
     fn touch(params: Vec<String>) -> io::Result<Answer> {
-        match File::new(&params[0]).touch() {
-            Ok(_) => Ok(Answer::new(0, "OK", "touch")),
-            Err(err) => Err(err.into())
+        for item in &params {
+            let retv = File::new(item).touch();
+            if let Some(err) = retv.err() {
+                return Err(err.into())
+            }
         }
+        Ok(Answer::new_with_data(0, "OK", "touch", params))
     }
     
     /// Usunięcie pliku
     fn rm(params: Vec<String>) -> io::Result<Answer> {
-        match File::new(&params[0]).rm() {
-            Ok(_) => Ok(Answer::new(0, "OK", "rm")),
-            Err(err) => Err(err.into())
+        for item in &params {
+            let retv = File::new(item).rm();
+            if let Some(err) = retv.err() {
+                return Err(err.into())
+            }       
         }
+        Ok(Answer::new_with_data(0, "OK", "rm", params))
+    }
+    
+    fn rmdir(params: Vec<String>) -> io::Result<Answer>{
+        unimplemented!()
     }
 }
 

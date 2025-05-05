@@ -68,6 +68,7 @@ fn display_answer(answer: Answer) {
                 "cd" => print_cd_answer(answer.data),
                 "mkdir" => print_mkdir_answer(answer.data),
                 "ls" | "la" => print_lsa_answer(answer.data),
+                "rmdir" => print_rmdir_answer(answer.data),
                 _ => eprintln!("{:?}", answer),
             }
         },
@@ -94,6 +95,10 @@ fn print_lsa_answer(data: Vec<String>) {
         let fi = FileInfo::from_json(item.as_bytes()).unwrap();
         println!("{}", fi);
     }
+}
+
+fn print_rmdir_answer(data: Vec<String>) {
+    println!("{}", data[0]);
 }
 
 fn print_error(answer: Answer) {

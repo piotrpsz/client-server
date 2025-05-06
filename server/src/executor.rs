@@ -5,9 +5,7 @@ use shared::data::{
 };
 
 use shared::ufs::dir::Dir;
-use shared::ufs::{file, Error};
-use shared::ufs::file::File;
-
+use shared::ufs::file::{self, File };
 
 static SEPERATOR: &str = "/";
 pub struct Executor;
@@ -157,7 +155,7 @@ impl Executor {
             _ => Self::rm_directories(params.as_slice())
         }
     }
-
+    
     /// Standardowa funkcja usuwani katalogu.
     /// UWAGA: katalog musi być pusty.
     fn rm_directories(paths: &[String]) -> io::Result<Answer> {
@@ -179,8 +177,8 @@ impl Executor {
             Err(err) => Err(err.into())
         }
     }
-
-    fn execute_with_fn<F>(executor: F, paths: &[String]) -> io::Result<Answer>
+/*
+    fn execute_with_fn<F>(fn_executor: F, paths: &[String]) -> io::Result<Answer>
         where F: Fn(&str) -> io::Result<Answer>
     {
         let removed: Result<Vec<String>, _> = paths.to_vec()
@@ -189,7 +187,7 @@ impl Executor {
                 Self::is_regular_name(path).is_ok()
             })
             .map(|path| {
-                match executor(path) {
+                match fn_executor(path) {
                     Ok(_) => Ok(path.clone()),
                     Err(err) => Err(err)
                 }
@@ -199,7 +197,9 @@ impl Executor {
         match removed {
             Ok(v) => Ok(Answer::new_with_data(0, "OK", "rmdir", v)),
             Err(err) => Err(err)
-        }    }
+        }    
+    }
+ */
     
     fn rm_directories_with_content(paths: &[String]) -> io::Result<Answer> {
         let removed: Result<Vec<String>, _> = paths.to_vec()
@@ -219,14 +219,6 @@ impl Executor {
             Ok(v) => Ok(Answer::new_with_data(0, "OK", "rmdir", v)),
             Err(err) => Err(err)
         }
-        
-        // let mut removed = Vec::with_capacity(paths.len());
-        // for path in paths {
-        //     Self::is_regular_name(path)?;
-        //     Self::rm_directory_with_content(path.as_str())?;
-        //     removed.push(path.clone());
-        // }
-        // Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
     }
     
     fn rm_directory_with_content(path: &str) -> io::Result<()> {

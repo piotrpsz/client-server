@@ -50,14 +50,19 @@ impl File {
         unsafe {
             match libc::access(self.cstr.as_ptr(), flag) {
                 0 => Ok(()),
-                _ => Err(Error::from(io::Error::last_os_error()))
+                _ => Err(Error::from_errno())
             }
         }
     }
     
     /// Utworzenie nowego pustego pliku.
     pub fn touch(&self) -> Result<()> {
-        match OpenOptions::new().create(true).write(true).open(self.path.as_str()) {
+        let stat = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(self.path.as_str()); 
+        match  stat {
             Ok(_) => Ok(()),
             Err(err) => Err(Error::from(err))
         }
@@ -276,7 +281,27 @@ impl File {
             }
         }
     }
-    
+}  // 
+
+pub fn exist(path: &str) -> Result<()> {
+    let cpath = CString::new(path).unwrap();
+    unsafe {
+        match libc::access(cpath.as_ptr(), libc::F_OK) {
+            0 => Ok(()),
+            _ => Err(Error::from_errno())
+        }
+    }
+}
+
+pub fn rename(from: &str, to: &str) -> Result<()> {
+    unsafe {
+        let from = CString::new(from).unwrap();
+        let to = CString::new(to).unwrap();
+        match libc::rename(from.as_ptr(), to.as_ptr()) {
+            0 =>  Ok(()),
+            _ => Err(Error::from_errno())
+        }
+    }
 }
 
 impl Drop for File {

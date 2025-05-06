@@ -6,7 +6,9 @@ use shared::data::{
 };
 
 use shared::ufs::dir::Dir;
+use shared::ufs::file;
 use shared::ufs::file::File;
+
 
 static SEPERATOR: &str = "/";
 pub struct Executor;
@@ -17,13 +19,32 @@ impl Executor {
             "pwd" => Self::pwd(),
             "cd" => Self::cd(request.params),
             "mkdir" => Self::mkdir(request.params),
-            "ls" => Self::ls(request.params),
+            "ls" | "ll" => Self::ls(request.params),
             "la" => Self::la(request.params),
             "touch" => Self::touch(request.params),
             "rm" => Self::rm(request.params),
             "rmdir" => Self::rmdir(request.params),
-            _ => Err(io::Error::new(io::ErrorKind::Other, "Command not found"))
+            "rename" | "move" => Self::move_file(request.params),
+            "exe" => Self::execute_cmd(request.params),
+            _ => Err(io::Error::new(io::ErrorKind::Other, "command not found"))
         }
+    }
+
+    fn execute_cmd(params: Vec<String>) -> io::Result<Answer> {
+        use std::process::Command;
+
+        let mut cmd = Command::new(params[0].as_str());
+        for param in &params[1..] {
+            cmd.arg(param);
+        }
+        let args = cmd.get_args().collect::<Vec<_>>();
+        eprintln!("{:?} {:?}", cmd.get_program(), args);
+        
+        let output = cmd.output()?;
+        let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+        let std_str = String::from_utf8_lossy(&output.stdout).to_string();
+
+        Ok(Answer::new_with_data(0, "OK", "exe", vec![std_str, err_str]))
     }
     
     /// pwd - print working directory
@@ -174,6 +195,25 @@ impl Executor {
         }
         Ok(())
     }
+    
+    fn move_file(paths: Vec<String>) -> io::Result<Answer> {
+        if paths.len() != 2 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid number of parameters"));
+        }
+        let from = paths[0].as_str();
+        let to = paths[1].as_str();
+        
+        if file::exist(to).is_ok() {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "File already exists"));
+        }
+        if file::exist(from).is_err() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "File not found"));
+        }
+        file::rename(from, to)?;
+        Ok(Answer::new_with_data(0, "OK", "rmdir", paths))
+    }
+    
+
     
     /// Sprawdzenie, czy ścieżka wskazuje na normalny katalog.
     /// Normalny katalog to ten, którego nazwa nie jest '.' i '..'.

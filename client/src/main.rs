@@ -8,6 +8,8 @@ use std::net::*;
 use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
 use shared::ufs::fileinfo::FileInfo;
+use ansi_term::*;
+use shared::ufs::Error;
 
 fn main() -> io::Result<()>{
     let addr = SocketAddr::from(([127, 0, 0, 1], 25105));
@@ -69,6 +71,8 @@ fn display_answer(answer: Answer) {
                 "mkdir" => print_mkdir_answer(answer.data),
                 "ls" | "la" => print_lsa_answer(answer.data),
                 "rmdir" => print_rmdir_answer(answer.data),
+                "exe" => print_exe_answer(answer.data),
+                
                 _ => eprintln!("{:?}", answer),
             }
         },
@@ -103,9 +107,23 @@ fn print_rmdir_answer(data: Vec<String>) {
     }
 }
 
+fn print_exe_answer(data: Vec<String>) {
+    data[0].split('\n').for_each(|line| {
+        if !line.is_empty() {
+            println!("{}", line)
+        }
+    });
+    data[1].split('\n').for_each(|line| {
+        if !line.is_empty() {
+            println!("{}", line)
+        }
+    });
+}
+
 fn print_error(answer: Answer) {
-    if !answer.data.is_empty() {
-        let text = format!("{}: {} (kind: {})", answer.message, answer.data[0], answer.data[1]);
-        println!("{:?}", text);
-    }
+    eprintln!("{}", Error::from(answer));
+    // if !answer.data.is_empty() {
+    //     let text = format!("{}: {} (kind: {})", answer.message, answer.data[0], answer.data[1]);
+    //     println!("{}", text);
+    // }
 }

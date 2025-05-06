@@ -8,7 +8,6 @@ use std::{io, thread};
 use crossbeam_channel::{unbounded, bounded, Sender, Receiver, select};
 use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
-use shared::ufs;
 use crate::executor::Executor;
 
 static STOP: AtomicBool = AtomicBool::new(false);

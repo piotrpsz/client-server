@@ -6,7 +6,6 @@ use shared::data::{
 };
 
 use shared::ufs::dir::Dir;
-use shared::ufs::Error;
 use shared::ufs::file::File;
 
 static SEPERATOR: &str = "/";
@@ -130,45 +129,73 @@ impl Executor {
     }
     
     fn rmdir(params: Vec<String>) -> io::Result<Answer>{
-        match params[0].as_str() {
-            "-r" => Self::rmdir_recursive(&params[1..]),
-            _ => Self::rmdir_empty_directory(params.as_slice())
-        }
-    }
-
-    fn rmdir_empty_directory(paths: &[String]) -> io::Result<Answer> {
-        fn validate_path(path: &str) -> io::Result<()> {
-            match path {
-                "." | ".."  => Err(io::Error::new(io::ErrorKind::InvalidInput, "Cannot remove current or parent directory")),
-                _ => Ok(())
-            }
-        }
-
-        let mut removed = vec![]; 
-        for path in paths {
-            validate_path(path)?;
-            Dir::rmdir(path)?;
-            removed.push(path.clone());
-        }
-        
-        // let removed: io::Result<Vec<String>> = paths
-        //     .iter()
-        //     .map(|path| {
-        //         // validate_path(path)?;
-        //         Dir::rmdir(path)
-        //             .map_err(|_| { Err(Error::from_errno()) })
-        //             .map(|_| { Ok(path.clone()) })
-        //     })        
-        //     .collect();
-        
-        Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
-    }
-    
-    fn rmdir_recursive(params: &[String]) -> io::Result<Answer> {
         if params.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "No call parameters"));
         }
-        Ok(Answer::new(0, "OK", "rmdir"))
+        match params[0].as_str() {
+            "-r" => Self::rm_directories_with_content(&params[1..]),
+            _ => Self::rm_directories(params.as_slice())
+        }
+    }
+
+    /// Standardowa funkcja usuwani katalogu.
+    /// UWAGA: katalog musi być pusty.
+    fn rm_directories(paths: &[String]) -> io::Result<Answer> {
+        let mut removed = vec![]; 
+        for path in paths {
+            Self::is_regular_name(path)?;
+            Dir::rmdir(path)?;
+            removed.push(path.clone());
+        }
+        Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
+    }
+
+    fn rm_directories_with_content(paths: &[String]) -> io::Result<Answer> {
+        let mut removed = Vec::with_capacity(paths.len());
+        for path in paths {
+            Self::is_regular_name(path)?;
+            Self::rm_directory_with_content(path.as_str())?;
+            removed.push(path.clone());
+        }
+        Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
+    }
+    
+    fn rm_directory_with_content(path: &str) -> io::Result<()> {
+        if Self::is_regular_name(path).is_ok() {
+            let content = Dir::read(path, true)?;
+            for fi in content {
+                if fi.is_dir() {
+                    Self::rm_directory_with_content(fi.path.as_str())?;
+                } else {
+                    File::new(fi.path.as_str()).rm()?;
+                }
+            }
+            Dir::rmdir(path)?;
+        }
+        Ok(())
+    }
+    
+    /// Sprawdzenie, czy ścieżka wskazuje na normalny katalog.
+    /// Normalny katalog to ten, którego nazwa nie jest '.' i '..'.
+    fn is_regular_name(path: &str) -> io::Result<()> {
+        // Wyznaczenie wszystkich pozycji znaku '/'.
+        let items = path.bytes()
+            .enumerate()
+            .filter(|(_, c)| *c == b'/')
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+        
+        let name = match items.last() {
+            // Wyznaczenie ostatniej części ścieżki, czyli nazwę.
+            Some(v) => path[v + 1..].to_string(),
+            // Brak znaków '/' - ścieżki jest pojedyńczym wyrazem, który jest nazwą.
+            _ => path.to_string()  
+        };
+        
+        match name.as_str() {
+            "." | ".."  => Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid entry name")),
+            _ => Ok(())
+        }
     }
 }
 

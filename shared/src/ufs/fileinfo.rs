@@ -22,7 +22,7 @@ pub enum FileType {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FileInfo {
     pub name: String,               // Nazwa pliku (nie ścieżka)
-    path: String,                   // Kompletna ścieżka do pliku (dir + name)
+    pub path: String,                   // Kompletna ścieżka do pliku (dir + name)
     owner_id: u32,                  // uid
     owner_name: String,             // nazwa właściciela przypisana do uid
     group_id: u32,                  // gid
@@ -53,7 +53,7 @@ impl FileInfo {
 
         Ok(Self {
             name: name.into(),
-            path: path.into(),
+            path,
             file_type: FileInfo::ftype(file_stat.st_mode),
             owner_id: file_stat.st_uid,
             owner_name: Self::user_name(file_stat.st_uid)?,

@@ -38,6 +38,11 @@ pub fn rnd_bytes(nbytes: usize) -> Vec<u8> {
     buffer
 }
 
+pub(crate) fn iv_block(buffer: &mut [u8]) {
+    rand::rng().fill_bytes(buffer);
+}
+
+
 pub(crate) fn align_to_block(input: &[u8], block_size: usize) -> Vec<u8> {
     let n = input.len() % block_size;
     let padd = if n != 0 {

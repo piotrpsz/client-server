@@ -1,4 +1,4 @@
-use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, pad_index, rnd_bytes};
+use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, iv_block, pad_index, rnd_bytes};
 
 const BLOCK_SIZE: usize = 8;
 // 8 bytes = 2 u32 = 54 bit
@@ -53,19 +53,22 @@ impl Gost {
             k21[i] = (K2[idx1] << 4) ^ K1[idx2];
         }
 
-        for i in 0usize..8 {
-            let mut idx = (i * 4) + 3;
-            let mut v = 0u32;
-            v = (v << 8) + (key[idx] as u32);
-            idx -= 1;
-            v = (v << 8) + (key[idx] as u32);
-            idx -= 1;
-            v = (v << 8) + (key[idx] as u32);
-            idx -= 1;
-            v = (v << 8) + (key[idx] as u32);
-            k[i] = v;
-        }
+        k.iter_mut()
+            .enumerate()
+            .for_each(|(i, k)| {
+                let mut idx = (i * 4) + 3;
+                let mut v = 0u32;
+                v = (v << 8) + (key[idx] as u32);
+                idx -= 1;
+                v = (v << 8) + (key[idx] as u32);
+                idx -= 1;
+                v = (v << 8) + (key[idx] as u32);
+                idx -= 1;
+                v = (v << 8) + (key[idx] as u32);
+                *k = v;
 
+            });
+        
         let ptr = &k as *const u32;
         let k0 = unsafe { *ptr.offset(0) };
         let k1 = unsafe { *ptr.offset(1) };
@@ -198,31 +201,26 @@ impl Gost {
     
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
-        
         let plain = align_to_block(input, BLOCK_SIZE);
-        let nbytes = plain.len();
-        let mut cipher = vec![0u8; nbytes];
+        let mut cipher = vec![0u8; plain.len()];
         
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
+        plain.iter().enumerate().step_by(BLOCK_SIZE).for_each(|(i, _)| {
             let plain_block  = bytes_to_block(&plain[i..]);
             let cipher_block = self.encrypt_block(plain_block);
             block_to_bytes(cipher_block, &mut cipher[i..]);
-        }
-        
+        });
         cipher
     }
 
     pub fn decrypt_ecb(&self, cipher: &[u8]) -> Vec<u8> {
         if cipher.is_empty() { return vec![]; }
-        
-        let nbytes = cipher.len();
-        let mut plain = vec![0u8; nbytes];
+        let mut plain = vec![0u8; cipher.len()];
 
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
+        cipher.iter().enumerate().step_by(BLOCK_SIZE).for_each(|(i, _)| {
             let cipher_block = bytes_to_block(&cipher[i..]);
             let plain_block = self.decrypt_block(cipher_block);
             block_to_bytes(plain_block, &mut plain[i..]);
-        }
+        });
 
         match pad_index(&plain) {
             Some(idx) => plain[..idx].to_vec(),
@@ -239,40 +237,37 @@ impl Gost {
     pub fn encrypt_cbc(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
 
-        let iv = rnd_bytes(BLOCK_SIZE);
         let plain = align_to_block(input, BLOCK_SIZE);
-        let nbytes = plain.len();
-        let mut cipher = vec![0u8; nbytes + BLOCK_SIZE];
-        cipher[0..BLOCK_SIZE].copy_from_slice(&iv);
+        let mut cipher = vec![0u8; BLOCK_SIZE + plain.len()];
+        iv_block(&mut cipher[0..BLOCK_SIZE]);
 
         let mut cipher_block = bytes_to_block(&cipher);
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
+        plain.iter().enumerate().step_by(BLOCK_SIZE).for_each(|(i, _)| {
             let plain_block = bytes_to_block(&plain[i..]);
             let w0 = plain_block.0 ^ cipher_block.0;
             let w1 = plain_block.1 ^ cipher_block.1;
             cipher_block = self.encrypt(w0, w1);
-            block_to_bytes(cipher_block, &mut cipher[(i + BLOCK_SIZE)..]);
-        }
+            block_to_bytes(cipher_block, &mut cipher[(i + BLOCK_SIZE)..]);            
+        });
         cipher
     }
 
     pub fn decrypt_cbc(&self, cipher: &[u8]) -> Vec<u8> {
         let nbytes = cipher.len();
         if nbytes < (2 * BLOCK_SIZE) { return vec![]; }
-
         let mut plain = vec![0u8; nbytes - BLOCK_SIZE];
-        
+
         let mut prv_cipher_block = bytes_to_block(cipher);
-        for i in (BLOCK_SIZE..nbytes).step_by(BLOCK_SIZE) {
-            let cipher_block = bytes_to_block(&cipher[i..]);
+        cipher[BLOCK_SIZE..].iter().enumerate().step_by(BLOCK_SIZE).for_each(|(i, _)| {
+            let cipher_block = bytes_to_block(&cipher[i+BLOCK_SIZE..]);
             let tmp = cipher_block;
             let plain_block = self.decrypt_block(cipher_block);
             let w0 = plain_block.0 ^ prv_cipher_block.0;
             let w1 = plain_block.1 ^ prv_cipher_block.1;
-            block_to_bytes((w0, w1), &mut plain[i-BLOCK_SIZE..]);
+            block_to_bytes((w0, w1), &mut plain[i..]);
             prv_cipher_block = tmp;
-        }
-
+        });
+        
         match pad_index(&plain) {
             Some(idx) => plain[..idx].to_vec(),
             _ => plain

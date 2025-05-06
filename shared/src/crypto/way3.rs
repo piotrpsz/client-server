@@ -59,12 +59,15 @@ impl Way3 {
     pub fn encrypt_block(&self, src: (u32,u32,u32)) -> (u32,u32,u32) {
         let mut a = [src.0, src.1, src.2];
 
-        for v in &ERCON[..NMBR] {
-            a[0] ^= self.k[0] ^ (v << 16);
-            a[1] ^= self.k[1];
-            a[2] ^= self.k[2] ^ v;
-            Self::rho(&mut a);       
-        }
+        ERCON[..NMBR]
+            .iter()
+            .for_each(|&v| {
+                a[0] ^= self.k[0] ^ (v << 16);
+                a[1] ^= self.k[1];
+                a[2] ^= self.k[2] ^ v;
+                Self::rho(&mut a);
+            });
+        
         a[0] ^= self.k[0] ^ (ERCON[NMBR] << 16);
         a[1] ^= self.k[1];
         a[2] ^= self.k[2] ^ ERCON[NMBR];
@@ -77,12 +80,20 @@ impl Way3 {
         let mut a = [src.0, src.1, src.2];
         Self::mu(&mut a);
 
-        for v in &DRCON[..NMBR] {
-            a[0] ^= self.ki[0] ^ (v << 16);
-            a[1] ^= self.ki[1];
-            a[2] ^= self.ki[2] ^ v;
-            Self::rho(&mut a);
-        }
+        DRCON[..NMBR]
+            .iter()
+            .for_each(|&v| {
+                a[0] ^= self.ki[0] ^ (v << 16);
+                a[1] ^= self.ki[1];
+                a[2] ^= self.ki[2] ^ v;
+                Self::rho(&mut a);
+            });
+        // for v in &DRCON[..NMBR] {
+        //     a[0] ^= self.ki[0] ^ (v << 16);
+        //     a[1] ^= self.ki[1];
+        //     a[2] ^= self.ki[2] ^ v;
+        //     Self::rho(&mut a);
+        // }
         a[0] ^= self.ki[0] ^ (DRCON[NMBR] << 16);
         a[1] ^= self.ki[1];
         a[2] ^= self.ki[2] ^ DRCON[NMBR];
@@ -99,7 +110,6 @@ impl Way3 {
 
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
-        eprintln!("{:?}", input.len());       
 
         let plain = align_to_block(input, BLOCK_SIZE);
         let nbytes = plain.len();
@@ -293,11 +303,6 @@ mod tests {
                 plain: (1, 1, 1),
                 cipher: (0x4059c76e, 0x83ae9dc4, 0xad21ecf7),
             },
-            // Test {
-            //     key: (4, 5, 6),
-            //     plain: (1, 2, 3),
-            //     cipher: (0xd2f05b5e, 0xd6144138, 0xcab920cd)
-            // }
         ];
 
         for tt in tests {

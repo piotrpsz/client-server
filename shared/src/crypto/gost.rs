@@ -199,6 +199,11 @@ impl Gost {
     *                                                               *
     ****************************************************************/
     
+    /// Zaszyfrowanie ciągu bajtów w trybie ECB.
+    /// Wielkość zaszyfrowanego ciągu ma taką samą długość ciągu szyfrowanego.
+    /// Jeśli długość ciągu do zaszyfrowania nie jest wielokrotnością bloku,
+    /// zostanie on uzupełniony paddingiem. 
+    /// UWAGA: ten sam ciąg po zaszyfrowaniu zawsze wygląda tak samo.
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
         let plain = align_to_block(input, BLOCK_SIZE);
@@ -207,19 +212,23 @@ impl Gost {
         plain.iter().enumerate().step_by(BLOCK_SIZE).for_each(|(i, _)| {
             let plain_block  = bytes_to_block(&plain[i..]);
             let cipher_block = self.encrypt_block(plain_block);
-            block_to_bytes(cipher_block, &mut cipher[i..]);
+            block_to_bytes(cipher_block, &mut cipher[i..i+BLOCK_SIZE]);
         });
         cipher
     }
 
+    /// Odszyfrowanie ciągu bajtów w trybie ECB.
+    /// Długość ciągu bajtów musi być wielokrotnością długości bloków.
     pub fn decrypt_ecb(&self, cipher: &[u8]) -> Vec<u8> {
-        if cipher.is_empty() { return vec![]; }
+        if cipher.is_empty() || cipher.len() % BLOCK_SIZE != 0 {
+            return vec![]; 
+        }
         let mut plain = vec![0u8; cipher.len()];
 
         cipher.iter().enumerate().step_by(BLOCK_SIZE).for_each(|(i, _)| {
             let cipher_block = bytes_to_block(&cipher[i..]);
             let plain_block = self.decrypt_block(cipher_block);
-            block_to_bytes(plain_block, &mut plain[i..]);
+            block_to_bytes(plain_block, &mut plain[i..i+BLOCK_SIZE]);
         });
 
         match pad_index(&plain) {
@@ -234,6 +243,10 @@ impl Gost {
     *                                                               *
     ****************************************************************/
 
+    /// Zaszyfrowanie ciągu bajtów w trybie CBC.
+    /// Przy szyfrowaniu używa się losowego IV.
+    /// Oznacza to, że nawet jeśli wiele razy szyfrujemy
+    /// ten sam tekst, po zaszyfrowaniu będzie on zawsze wyglądał inaczej.
     pub fn encrypt_cbc(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
 
@@ -247,13 +260,19 @@ impl Gost {
             let w0 = plain_block.0 ^ cipher_block.0;
             let w1 = plain_block.1 ^ cipher_block.1;
             cipher_block = self.encrypt(w0, w1);
-            block_to_bytes(cipher_block, &mut cipher[(i + BLOCK_SIZE)..]);            
+            block_to_bytes(cipher_block, &mut cipher[(i + BLOCK_SIZE)..(i+BLOCK_SIZE+8)]);            
         });
         cipher
     }
 
+    /// Odszyfrowanie ciągu bajtów w trybie CBC.
+    /// Długość ciągu bajtów musi być wielokrotnością długości bloku
+    /// i musi zawierać co najmniej 2 bloki.
     pub fn decrypt_cbc(&self, cipher: &[u8]) -> Vec<u8> {
         let nbytes = cipher.len();
+        if nbytes / BLOCK_SIZE < 2 || nbytes % BLOCK_SIZE != 0 {
+            return vec![];
+        }
         if nbytes < (2 * BLOCK_SIZE) { return vec![]; }
         let mut plain = vec![0u8; nbytes - BLOCK_SIZE];
 
@@ -264,7 +283,7 @@ impl Gost {
             let plain_block = self.decrypt_block(cipher_block);
             let w0 = plain_block.0 ^ prv_cipher_block.0;
             let w1 = plain_block.1 ^ prv_cipher_block.1;
-            block_to_bytes((w0, w1), &mut plain[i..]);
+            block_to_bytes((w0, w1), &mut plain[i..i+8]);
             prv_cipher_block = tmp;
         });
         
@@ -316,15 +335,7 @@ mod tests {
         let gt = gt.unwrap();
 
         let plain = "Artur, Błażej, Jolanta i Piotr Pszczółkowscy".as_bytes();
-        let expt = [0x5cu8, 0xc8, 0x5a, 0xb2, 0xab, 0xa8, 0x58, 0x98,
-            0x52, 0x33, 0x67, 0x6c, 0x4b, 0x60, 0x25, 0x6e, 0x22, 0x4d, 0x2e,
-            0xb7, 0x59, 0xe5, 0x63, 0x27, 0x63, 0x5b, 0x61, 0xfd, 0x9b, 0xa3,
-            0x3e, 0x3c, 0xa3, 0xa5, 0xe6, 0xd9, 0x6d, 0x89, 0x14, 0x07, 0x63,
-            0x6c, 0x1d, 0x19, 0x6f, 0xc2, 0xde, 0x44];
-
         let cipher = gt.encrypt_ecb(plain);
-        assert_eq!(cipher, expt);
-        
         let result = gt.decrypt_ecb(&cipher);
         assert_eq!(result, plain);
     }

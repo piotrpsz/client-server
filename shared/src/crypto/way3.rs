@@ -67,7 +67,6 @@ impl Way3 {
                 a[2] ^= self.k[2] ^ v;
                 Self::rho(&mut a);
             });
-        
         a[0] ^= self.k[0] ^ (ERCON[NMBR] << 16);
         a[1] ^= self.k[1];
         a[2] ^= self.k[2] ^ ERCON[NMBR];
@@ -158,7 +157,8 @@ impl Way3 {
             let w1 = plain_block.1 ^ cipher_block.1;
             let w2 = plain_block.2 ^ cipher_block.2;
             cipher_block = self.encrypt_block((w0, w1, w2));
-            block3_to_bytes(cipher_block, &mut cipher[i+BLOCK_SIZE..i+2*BLOCK_SIZE]);
+            let pos = i + BLOCK_SIZE;
+            block3_to_bytes(cipher_block, &mut cipher[pos..pos+BLOCK_SIZE]);
         }
         
         cipher

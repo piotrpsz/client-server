@@ -56,79 +56,23 @@ pub(crate) fn align_to_block(input: &[u8], block_size: usize) -> Vec<u8> {
 }
 
  pub(crate) fn bytes_to_block(data: &[u8]) -> (u32,u32) {
-    unsafe {
-        let ptr = data.as_ptr() as *const u32;
-        let a = *ptr.offset(0);
-        let b = *ptr.offset(1);
-        (a,b)
-    }
-}
-
-pub(crate) fn bytes_to_block3(data: &[u8]) -> (u32,u32,u32) {
-    let chunks = data.chunks(4).collect::<Vec<_>>();
-    let mut retv: Vec<u32> = vec![];
-    for chunk in chunks.iter() {
-        let value = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        retv.push(value);    
-    }
-    (retv[0], retv[1], retv[2])
-/*    
-    unsafe {
-        let ptr = data.as_ptr() as *const u32;
-        let a = *ptr.offset(0);
-        let b = *ptr.offset(1);
-        let c = *ptr.offset(2);
-        (a,b,c)   
-    }
-    
- */
+     (u32::from_be_bytes(data[0..4].try_into().unwrap()),
+      u32::from_be_bytes(data[4..8].try_into().unwrap()))
 }
 
 pub(crate) fn block_to_bytes(block: (u32, u32), data: &mut [u8]) {
-    unsafe {
-        let dst = data.as_mut_ptr();
-        let src0 = &block.0 as *const u32 as *const u8;
-        let src1 = &block.1 as *const u32 as *const u8;
-        
-        *dst.offset(0) = *src0.offset(0);
-        *dst.offset(1) = *src0.offset(1);
-        *dst.offset(2) = *src0.offset(2);
-        *dst.offset(3) = *src0.offset(3);
-        
-        *dst.offset(4) = *src1.offset(0);
-        *dst.offset(5) = *src1.offset(1);
-        *dst.offset(6) = *src1.offset(2);
-        *dst.offset(7) = *src1.offset(3);
-    }
+    data[..4].copy_from_slice(&block.0.to_be_bytes());
+    data[4..].copy_from_slice(&block.1.to_be_bytes());
+}
+
+pub(crate) fn bytes_to_block3(data: &[u8]) -> (u32,u32,u32) {
+    (u32::from_be_bytes(data[0..4].try_into().unwrap()),
+     u32::from_be_bytes(data[4..8].try_into().unwrap()),
+     u32::from_be_bytes(data[8..12].try_into().unwrap()))
 }
 
 pub(crate) fn block3_to_bytes(block: (u32, u32, u32), data: &mut [u8]) {
     data[..4].copy_from_slice(&block.0.to_be_bytes());
     data[4..8].copy_from_slice(&block.1.to_be_bytes());
     data[8..].copy_from_slice(&block.2.to_be_bytes());
-    
-    /*
-    unsafe {
-        let dst = data.as_mut_ptr();
-        let src0 = &block.0 as *const u32 as *const u8;
-        let src1 = &block.1 as *const u32 as *const u8;
-        let src2 = &block.2 as *const u32 as *const u8;
-        
-        *dst.offset(0) = *src0.offset(0);
-        *dst.offset(1) = *src0.offset(1);
-        *dst.offset(2) = *src0.offset(2);
-        *dst.offset(3) = *src0.offset(3);
-        
-        *dst.offset(4) = *src1.offset(0);
-        *dst.offset(5) = *src1.offset(1);
-        *dst.offset(6) = *src1.offset(2);
-        *dst.offset(7) = *src1.offset(3);
-        
-        *dst.offset(8) = *src2.offset(0);
-        *dst.offset(9) = *src2.offset(1);
-        *dst.offset(10) = *src2.offset(2);
-        *dst.offset(11) = *src2.offset(3);
-    }
-   
-     */
 }

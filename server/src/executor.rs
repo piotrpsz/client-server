@@ -1,4 +1,3 @@
-
 use std::{io, env, fs};
 use shared::data::{
     answer::Answer,
@@ -6,7 +5,7 @@ use shared::data::{
 };
 
 use shared::ufs::dir::Dir;
-use shared::ufs::file;
+use shared::ufs::{file, Error};
 use shared::ufs::file::File;
 
 
@@ -162,23 +161,72 @@ impl Executor {
     /// Standardowa funkcja usuwani katalogu.
     /// UWAGA: katalog musi być pusty.
     fn rm_directories(paths: &[String]) -> io::Result<Answer> {
-        let mut removed = vec![]; 
-        for path in paths {
-            Self::is_regular_name(path)?;
-            Dir::rmdir(path)?;
-            removed.push(path.clone());
+        let removed: Result<Vec<String>, _> = paths.to_vec()
+            .iter()
+            .filter(|path| {
+                Self::is_regular_name(path).is_ok()
+            })
+            .map(|path| {
+                match Dir::rmdir(path) {
+                    Ok(_) => Ok(path.clone()),
+                    Err(err) => Err(err)
+                }
+            })
+            .collect();
+        
+        match removed {
+            Ok(v) => Ok(Answer::new_with_data(0, "OK", "rmdir", v)),
+            Err(err) => Err(err.into())
         }
-        Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
     }
 
+    fn execute_with_fn<F>(executor: F, paths: &[String]) -> io::Result<Answer>
+        where F: Fn(&str) -> io::Result<Answer>
+    {
+        let removed: Result<Vec<String>, _> = paths.to_vec()
+            .iter()
+            .filter(|path| {
+                Self::is_regular_name(path).is_ok()
+            })
+            .map(|path| {
+                match executor(path) {
+                    Ok(_) => Ok(path.clone()),
+                    Err(err) => Err(err)
+                }
+            })
+            .collect();
+
+        match removed {
+            Ok(v) => Ok(Answer::new_with_data(0, "OK", "rmdir", v)),
+            Err(err) => Err(err)
+        }    }
+    
     fn rm_directories_with_content(paths: &[String]) -> io::Result<Answer> {
-        let mut removed = Vec::with_capacity(paths.len());
-        for path in paths {
-            Self::is_regular_name(path)?;
-            Self::rm_directory_with_content(path.as_str())?;
-            removed.push(path.clone());
+        let removed: Result<Vec<String>, _> = paths.to_vec()
+            .iter()
+            .filter(|path| {
+                Self::is_regular_name(path).is_ok()
+            })
+            .map(|path| {
+                match Self::rm_directory_with_content(path) {
+                    Ok(_) => Ok(path.clone()),
+                    Err(err) => Err(err)
+                }
+            })
+            .collect();
+
+        match removed {
+            Ok(v) => Ok(Answer::new_with_data(0, "OK", "rmdir", v)),
+            Err(err) => Err(err)
         }
-        Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
+        
+        // let mut removed = Vec::with_capacity(paths.len());
+        // for path in paths {
+        //     Self::is_regular_name(path)?;
+        //     Self::rm_directory_with_content(path.as_str())?;
+        //     removed.push(path.clone());
+        // }
+        // Ok(Answer::new_with_data(0, "OK", "rmdir", removed))
     }
     
     fn rm_directory_with_content(path: &str) -> io::Result<()> {

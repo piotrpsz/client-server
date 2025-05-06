@@ -20,15 +20,6 @@ pub(crate) fn pad_index(data: &[u8]) -> Option<usize> {
             break;
         }
     }
-    
-    // for i in (data.len()-1..= 0).rev() {
-    //     if data[i] != 0 {
-    //         if data[i] == 128 {
-    //             return Some(i);
-    //         }
-    //         break;
-    //     }
-    // }
     None
 }
 
@@ -41,7 +32,6 @@ pub fn rnd_bytes(nbytes: usize) -> Vec<u8> {
 pub(crate) fn iv_block(buffer: &mut [u8]) {
     rand::rng().fill_bytes(buffer);
 }
-
 
 pub(crate) fn align_to_block(input: &[u8], block_size: usize) -> Vec<u8> {
     let n = input.len() % block_size;

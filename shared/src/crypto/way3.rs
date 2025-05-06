@@ -1,13 +1,7 @@
 // https://github.com/stamparm/cryptospecs/blob/master/symmetrical/sources/3-way.c
 // http://www.users.zetnet.co.uk/hopwood/crypto/scan/cs.html#3-Way
 
-use crate::crypto::tool::{
-    align_to_block, 
-    bytes_to_block3, 
-    block3_to_bytes, 
-    pad_index, 
-    rnd_bytes,
-};
+use crate::crypto::tool::{align_to_block, bytes_to_block3, block3_to_bytes, pad_index, iv_block};
 
 const NMBR: usize = 11;             // Liczba rund
 const BLOCK_SIZE: usize = 12;       // 3xu32: 12 bajtów
@@ -101,6 +95,11 @@ impl Way3 {
     *                                                               *
     ****************************************************************/
 
+    /// Zaszyfrowanie ciągu bajtów w trybie ECB.
+    /// Wielkość zaszyfrowanego ciągu ma taką samą długość ciągu szyfrowanego.
+    /// Jeśli długość ciągu do zaszyfrowania nie jest wielokrotnością bloku,
+    /// zostanie on uzupełniony paddingiem. 
+    /// UWAGA: ten sam ciąg po zaszyfrowaniu zawsze wygląda tak samo.
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
 
@@ -108,27 +107,35 @@ impl Way3 {
         let nbytes = plain.len();
         let mut cipher = vec![0u8; nbytes];
 
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
-            let plain_block = bytes_to_block3(&plain[i..]);
-            let cipher_block = self.encrypt_block(plain_block);
-            block3_to_bytes(cipher_block, &mut cipher[i..i+BLOCK_SIZE]);
-        }
-
+        plain.iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let plain_block = bytes_to_block3(&plain[i..]);
+                let cipher_block = self.encrypt_block(plain_block);
+                block3_to_bytes(cipher_block, &mut cipher[i..i+BLOCK_SIZE]);                
+            });
+        
         cipher
     }
 
+    /// Odszyfrowanie ciągu bajtów w trybie ECB.
+    /// Długość ciągu bajtów musi być wielokrotnością długości bloków.
     pub fn decrypt_ecb(&self, cipher: &[u8]) -> Vec<u8> {
         if cipher.is_empty() { return vec![]; }
 
         let nbytes = cipher.len();
         let mut plain = vec![0u8; nbytes];
 
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
-            let cipher_block = bytes_to_block3(&cipher[i..]);
-            let plain_block = self.decrypt_block(cipher_block);
-            block3_to_bytes(plain_block, &mut plain[i..i+BLOCK_SIZE]);
-        }
-
+        cipher.iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let cipher_block = bytes_to_block3(&cipher[i..]);
+                let plain_block = self.decrypt_block(cipher_block);
+                block3_to_bytes(plain_block, &mut plain[i..i+BLOCK_SIZE]);
+            });
+        
         match pad_index(&plain) {
             Some(idx) => plain[..idx].to_vec(),
             _ => plain,
@@ -141,51 +148,63 @@ impl Way3 {
     *                                                               *
     ****************************************************************/
 
+    /// Zaszyfrowanie ciągu bajtów w trybie CBC.
+    /// Przy szyfrowaniu używa się losowego IV.
+    /// Oznacza to, że nawet jeśli wiele razy szyfrujemy
+    /// ten sam tekst, po zaszyfrowaniu będzie on zawsze wyglądał inaczej.
     pub fn encrypt_cbc(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
         
-        let iv = rnd_bytes(BLOCK_SIZE);
         let plain = align_to_block(input, BLOCK_SIZE);
-        let nbytes = plain.len();
-        let mut cipher = vec![0u8; nbytes + BLOCK_SIZE];
-        cipher[0..BLOCK_SIZE].copy_from_slice(&iv);
+        let mut cipher = vec![0u8; BLOCK_SIZE + plain.len()];
+        iv_block(&mut cipher[0..BLOCK_SIZE]);
         
         let mut cipher_block = bytes_to_block3(&cipher);
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
-            let plain_block = bytes_to_block3(&plain[i..]);
-            let w0 = plain_block.0 ^ cipher_block.0;
-            let w1 = plain_block.1 ^ cipher_block.1;
-            let w2 = plain_block.2 ^ cipher_block.2;
-            cipher_block = self.encrypt_block((w0, w1, w2));
-            let pos = i + BLOCK_SIZE;
-            block3_to_bytes(cipher_block, &mut cipher[pos..pos+BLOCK_SIZE]);
-        }
+        plain.iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let plain_block = bytes_to_block3(&plain[i..]);
+                let w0 = plain_block.0 ^ cipher_block.0;
+                let w1 = plain_block.1 ^ cipher_block.1;
+                let w2 = plain_block.2 ^ cipher_block.2;
+                cipher_block = self.encrypt_block((w0, w1, w2));
+                let pos = i + BLOCK_SIZE;
+                block3_to_bytes(cipher_block, &mut cipher[pos..pos+BLOCK_SIZE]);
+            });
         
         cipher
     }
 
+    /// Odszyfrowanie ciągu bajtów w trybie CBC.
+    /// Długość ciągu bajtów musi być wielokrotnością długości bloku
+    /// i musi zawierać co najmniej 2 bloki.
     pub fn decrypt_cbc(&self, cipher: &[u8]) -> Vec<u8> {
         let nbytes = cipher.len();
-        if nbytes < (2 * BLOCK_SIZE) { return vec![]; }
-        
+        if nbytes / BLOCK_SIZE < 2 || nbytes % BLOCK_SIZE != 0 {
+            return vec![]; 
+        }
         let mut plain = vec![0u8; nbytes - BLOCK_SIZE];
         
         let mut ptv_cipher_block = bytes_to_block3(cipher);
-        for i in (BLOCK_SIZE..nbytes).step_by(BLOCK_SIZE) {
-            let cipher_block = bytes_to_block3(&cipher[i..]);
-            let tmp = cipher_block;
-            let plain_block = self.decrypt_block(cipher_block);
-            let w0 = plain_block.0 ^ ptv_cipher_block.0;
-            let w1 = plain_block.1 ^ ptv_cipher_block.1;
-            let w2 = plain_block.2 ^ ptv_cipher_block.2;
-            block3_to_bytes((w0, w1, w2), &mut plain[i-BLOCK_SIZE..i]);
-            ptv_cipher_block = tmp;
-        }
+        cipher[BLOCK_SIZE..].iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let cipher_block = bytes_to_block3(&cipher[i+BLOCK_SIZE..]);
+                let tmp = cipher_block;
+                let plain_block = self.decrypt_block(cipher_block);
+                let w0 = plain_block.0 ^ ptv_cipher_block.0;
+                let w1 = plain_block.1 ^ ptv_cipher_block.1;
+                let w2 = plain_block.2 ^ ptv_cipher_block.2;
+                block3_to_bytes((w0, w1, w2), &mut plain[i..i+BLOCK_SIZE]);
+                
+                ptv_cipher_block = tmp;
+            });
         
-        match pad_index(&plain) {
-            Some(idx) => plain[..idx].to_vec(),
-            _ => plain,       
-        }
+        pad_index(&plain)
+            .map(|idx| plain[..idx].to_vec())
+            .unwrap_or(plain)
     }
 
     /********************************************************************

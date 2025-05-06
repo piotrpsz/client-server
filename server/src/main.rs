@@ -1,3 +1,5 @@
+extern crate core;
+
 mod executor;
 
 use std::error::Error;

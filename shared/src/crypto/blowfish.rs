@@ -207,6 +207,7 @@ impl Blowfish {
         let nbytes = plain.len();
         let mut cipher = vec![0; nbytes];
 
+        
         for i in (0..nbytes).step_by(BLOCK_SIZE) {
             let plain_block = bytes_to_block(&plain[i..]);
             let cipher_block = self.encrypt_block(plain_block);
@@ -248,7 +249,8 @@ impl Blowfish {
             let w0 = plain_block.0 ^ cipher_block.0;
             let w1 = plain_block.1 ^ cipher_block.1;
             cipher_block = self.encrypt(w0, w1);
-            block_to_bytes(cipher_block, &mut cipher[i + BLOCK_SIZE..]);
+            let pos = i + BLOCK_SIZE;
+            block_to_bytes(cipher_block, &mut cipher[pos..pos + BLOCK_SIZE]);
         }
         cipher
     }
@@ -269,7 +271,8 @@ impl Blowfish {
             let plain_block = self.decrypt_block(cipher_block);
             let w0 = plain_block.0 ^ prv_cipher_block.0;
             let w1 = plain_block.1 ^ prv_cipher_block.1;
-            block_to_bytes((w0, w1), &mut plain[(i - BLOCK_SIZE)..]);
+            let pos = i - BLOCK_SIZE;
+            block_to_bytes((w0, w1), &mut plain[pos..pos + BLOCK_SIZE]);
             prv_cipher_block = tmp;
         }
 

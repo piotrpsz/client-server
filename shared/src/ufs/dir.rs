@@ -53,14 +53,6 @@ impl Dir {
     }
     
     fn compare_dir_name(a: &str, b: &str) -> Ordering {
-        #[derive(PartialOrd, PartialEq)]
-        enum Type {
-            ThisDir,
-            ParentDir,
-            Hidden,
-            Normal
-        }
-        
         if a == "." {
             return if b == "." {
                 Ordering::Equal

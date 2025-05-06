@@ -1,4 +1,3 @@
-use std::option::Option;
 use std::ffi::CStr;
 use std::fmt::Display;
 use std::io;

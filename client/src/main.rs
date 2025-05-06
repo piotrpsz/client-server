@@ -8,7 +8,6 @@ use std::net::*;
 use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
 use shared::ufs::fileinfo::FileInfo;
-use ansi_term::*;
 use shared::ufs::Error;
 
 fn main() -> io::Result<()>{

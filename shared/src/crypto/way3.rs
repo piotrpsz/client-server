@@ -88,12 +88,6 @@ impl Way3 {
                 a[2] ^= self.ki[2] ^ v;
                 Self::rho(&mut a);
             });
-        // for v in &DRCON[..NMBR] {
-        //     a[0] ^= self.ki[0] ^ (v << 16);
-        //     a[1] ^= self.ki[1];
-        //     a[2] ^= self.ki[2] ^ v;
-        //     Self::rho(&mut a);
-        // }
         a[0] ^= self.ki[0] ^ (DRCON[NMBR] << 16);
         a[1] ^= self.ki[1];
         a[2] ^= self.ki[2] ^ DRCON[NMBR];

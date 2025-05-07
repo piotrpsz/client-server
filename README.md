@@ -1,2 +1,2 @@
 # Client - Server
-Communication between client and swerver in Rust
+Communication between client and server in Rust

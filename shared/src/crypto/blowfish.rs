@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, pad_index, rnd_bytes};
+use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, iv_fill, pad_index, rnd_bytes};
 
 const BLOCK_SIZE: usize = 8;
 pub const MIN_KEY_SIZE: usize = 4;
@@ -18,26 +18,23 @@ impl Blowfish {
         }
         
         let mut bf = Blowfish { p: [0u32; 18], s: [[0u32; 256]; 4] };
-
-        for i in 0..4 {
-            for j in 0..256 {
-                bf.s[i][j] = ORIG_S[i][j];
-            }
-        }
-
+        bf.s = ORIG_S;
         let mut k = 0;
-        for i in 0..18 {
-            let mut data = 0u32;
-            for _j in 0..4 {
-                data = (data << 8) | (key[k] as u32);
-                k += 1;
-                if k >= key_len {
-                    k = 0;
-                }
-            }
-            bf.p[i] = ORIG_P[i] ^ data;
-        }
-
+        
+        ORIG_P.iter()
+            .zip(bf.p.iter_mut())
+            .for_each(|(orig_p, p)| {
+                let mut data = 0u32;
+                (0..4).for_each(|_| {
+                    data = (data << 8) | (key[k] as u32);
+                    k += 1;
+                    if k >= key_len {
+                        k = 0;
+                    }
+                });
+                *p = *orig_p ^ data;
+            });
+        
         let mut xl = 0u32;
         let mut xr = 0u32;
 
@@ -108,16 +105,12 @@ impl Blowfish {
     }
 
     fn f(&self, x: u32) -> u32 {
-        unsafe {
-            let ptr: *const u8 = &x as *const u32 as *const u8;
-
-            let d = *ptr.offset(0) as usize;
-            let c = *ptr.offset(1) as usize;
-            let b = *ptr.offset(2) as usize;
-            let a = *ptr.offset(3) as usize;
-
-            (self.s[0][a].wrapping_add(self.s[1][b]) ^ self.s[2][c]).wrapping_add(self.s[3][d])
-        }
+        let bytes = x.to_be_bytes();
+        let a = bytes[0] as usize;
+        let b = bytes[1] as usize;
+        let c = bytes[2] as usize;
+        let d = bytes[3] as usize;
+        (self.s[0][a].wrapping_add(self.s[1][b]) ^ self.s[2][c]).wrapping_add(self.s[3][d])         
     }
 
 
@@ -199,90 +192,114 @@ impl Blowfish {
     *                            E C B                              *
     *                                                               *
     ****************************************************************/
-    
+
+    /// Zaszyfrowanie ciągu bajtów w trybie ECB.
+    /// Wielkość zaszyfrowanego ciągu ma taką samą długość ciągu szyfrowanego.
+    /// Jeśli długość ciągu do zaszyfrowania nie jest wielokrotnością bloku,
+    /// zostanie on uzupełniony paddingiem. 
+    /// UWAGA: ten sam ciąg po zaszyfrowaniu zawsze wygląda tak samo.
     pub fn encrypt_ecb(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
-
         let plain = align_to_block(input, BLOCK_SIZE);
-        let nbytes = plain.len();
-        let mut cipher = vec![0; nbytes];
+        let mut cipher = vec![0u8; plain.len()];
 
+        plain.iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let plain_block = bytes_to_block(&plain[i..]);
+                let cipher_block = self.encrypt_block(plain_block);
+                block_to_bytes(cipher_block, &mut cipher[i..]);
+            });
         
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
-            let plain_block = bytes_to_block(&plain[i..]);
-            let cipher_block = self.encrypt_block(plain_block);
-            block_to_bytes(cipher_block, &mut cipher[i..]);
-        }
         cipher
     }
 
+    /// Odszyfrowanie ciągu bajtów w trybie ECB.
+    /// Długość ciągu bajtów musi być wielokrotnością długości bloków.
     pub fn decrypt_ecb(&self, cipher: &[u8]) -> Vec<u8> {
-        if cipher.is_empty() { return vec![]; }
-
-        let nbytes = cipher.len();
-        let mut plain = vec![0; nbytes];
-
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
-            let cipher_block = bytes_to_block(&cipher[i..]);
-            let plain_block = self.decrypt_block(cipher_block);
-            block_to_bytes(plain_block, &mut plain[i..]);
+        if cipher.is_empty() || cipher.len() % BLOCK_SIZE != 0 {
+            return vec![];
         }
+        let mut plain = vec![0u8; cipher.len()];
+        
+        cipher.iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let cipher_block = bytes_to_block(&cipher[i..]);
+                let plain_block = self.decrypt_block(cipher_block);
+                block_to_bytes(plain_block, &mut plain[i..]);
+            });
 
-        match pad_index(&plain) {
-            Some(idx) => plain[..idx].to_vec(),
-            None => plain,
-        }
+        pad_index(&plain)
+            .map(|idx| plain[..idx].to_vec())
+            .unwrap_or(plain)
     }
 
+    /****************************************************************
+    *                                                               *
+    *                            C B C                              *
+    *                                                               *
+    ****************************************************************/
+
+    /// Zaszyfrowanie ciągu bajtów w trybie CBC.
+    /// Przy szyfrowaniu używa się losowego IV.
+    /// Oznacza to, że nawet jeśli wiele razy szyfrujemy
+    /// ten sam tekst, po zaszyfrowaniu będzie on zawsze wyglądał inaczej.
     pub fn encrypt_cbc(&self, input: &[u8]) -> Vec<u8> {
         if input.is_empty() { return vec![]; }
         
-        let iv = rnd_bytes(BLOCK_SIZE);
         let plain = align_to_block(input, BLOCK_SIZE);         
-        let nbytes = plain.len();
-        let mut cipher = vec![0; nbytes + BLOCK_SIZE];
-        cipher[..BLOCK_SIZE].copy_from_slice(&iv);
+        let mut cipher = vec![0u8; BLOCK_SIZE + plain.len()];
+        iv_fill(&mut cipher[..BLOCK_SIZE]);
 
         let mut cipher_block = bytes_to_block(&cipher);
-        for i in (0..nbytes).step_by(BLOCK_SIZE) {
-            let plain_block = bytes_to_block(&plain[i..]);
-            let w0 = plain_block.0 ^ cipher_block.0;
-            let w1 = plain_block.1 ^ cipher_block.1;
-            cipher_block = self.encrypt(w0, w1);
-            let pos = i + BLOCK_SIZE;
-            block_to_bytes(cipher_block, &mut cipher[pos..pos + BLOCK_SIZE]);
-        }
+        plain.iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let plain_block = bytes_to_block(&plain[i..]);
+                let w0 = plain_block.0 ^ cipher_block.0;
+                let w1 = plain_block.1 ^ cipher_block.1;
+                cipher_block = self.encrypt(w0, w1);
+                let pos = i + BLOCK_SIZE;
+                block_to_bytes(cipher_block, &mut cipher[pos..pos + BLOCK_SIZE]);
+            });         
+        
         cipher
     }
 
-    /// Odszyfrowanie CBC.
+    /// Odszyfrowanie ciągu bajtów w trybie CBC.
+    /// Długość ciągu bajtów musi być wielokrotnością długości bloku
+    /// i musi zawierać co najmniej 2 bloki.
     pub fn decrypt_cbc(&self, cipher: &[u8]) -> Vec<u8> {
         let nbytes = cipher.len();
-        if nbytes < (2 * BLOCK_SIZE) {
+        if nbytes / BLOCK_SIZE < 2 || nbytes % BLOCK_SIZE != 0 {
             return vec![];
         }
-        // Text wynikowy będzie krótszy co najmniej o blok IV.
         let mut plain = vec![0; nbytes - BLOCK_SIZE];
         
         let mut prv_cipher_block = bytes_to_block(cipher);
-        for i in (BLOCK_SIZE..nbytes).step_by(BLOCK_SIZE) {
-            let cipher_block = bytes_to_block(&cipher[i..]);
-            let tmp = cipher_block;
-            let plain_block = self.decrypt_block(cipher_block);
-            let w0 = plain_block.0 ^ prv_cipher_block.0;
-            let w1 = plain_block.1 ^ prv_cipher_block.1;
-            let pos = i - BLOCK_SIZE;
-            block_to_bytes((w0, w1), &mut plain[pos..pos + BLOCK_SIZE]);
-            prv_cipher_block = tmp;
-        }
-
-        match pad_index(&plain) {
-            Some(idx) => plain[..idx].to_vec(),
-            None => plain,
-        }
+        cipher[BLOCK_SIZE..].iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let cipher_block = bytes_to_block(&cipher[i+BLOCK_SIZE..]);
+                let tmp = cipher_block;
+                let plain_block = self.decrypt_block(cipher_block);
+                let w0 = plain_block.0 ^ prv_cipher_block.0;
+                let w1 = plain_block.1 ^ prv_cipher_block.1;
+                block_to_bytes((w0, w1), &mut plain[i..i+BLOCK_SIZE]);
+                prv_cipher_block = tmp;
+            });
+        
+        pad_index(&plain)
+            .map(|idx| plain[..idx].to_vec())
+            .unwrap_or(plain)
     }
 
-}   // end of impl
+}   // end of Blowfish
 
 /********************************************************************
 *                                                                   *

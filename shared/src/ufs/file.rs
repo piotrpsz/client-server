@@ -3,9 +3,14 @@ extern crate libc;
 use std::string::String;
 use std::ffi::CString;
 use std::fs::OpenOptions;
-use std::io;
 use chrono::{DateTime, Local};
-use crate::ufs::{Error, Result};
+use crate::xerror::{Result, Error};
+
+static FILE_ERR_CODE: i32 = -1;
+static FILE_ALREADY_OPENED: &str = "file is already opened";
+static FILE_NOT_OPENED: &str = "file is not opened";
+static FILE_READ_ERROR: &str = "read bytes is not equal to buffer size";
+static FILE_WRITE_ERROR: &str = "write bytes is not equal to buffer size";
 
 #[repr(i32)]
 pub enum FLAG {
@@ -73,7 +78,7 @@ impl File {
         unsafe {
             match libc::chmod(self.cstr.as_ptr(), mode) {
                 0 => Ok(()),
-                _ => Err(Error::from(io::Error::last_os_error()))
+                _ => Err(Error::from_errno())
             }
         }
     }
@@ -86,7 +91,7 @@ impl File {
         unsafe {
             match libc::utime(self.cstr.as_ptr(), &utb) {
                 0 => Ok(()),
-                _ => Err(Error::from(io::Error::last_os_error()))
+                _ => Err(Error::from_errno())
             }
         }
     }
@@ -98,7 +103,7 @@ impl File {
             self.close()?;
             match libc::unlink(self.cstr.as_ptr()) {
                 0 => Ok(()),
-                _ => Err(Error::from(io::Error::last_os_error()))
+                _ => Err(Error::from_errno())
             }
         }
     }
@@ -114,7 +119,7 @@ impl File {
                     self.cstr = dst;
                     Ok(())
                 },
-                _ => Err(Error::from(io::Error::last_os_error()))
+                _ => Err(Error::from_errno())
             }
         }
     }
@@ -130,11 +135,23 @@ impl File {
         self.open_with_flag(FLAG::Write)
     }
     
+    fn already_opened(&self) -> Result<()> {
+        match self.fd {
+            -1 => Ok(()),
+            _ => Err(Error::new(FILE_ERR_CODE, FILE_ALREADY_OPENED)),
+        }
+    }
+    fn not_opened(&self) -> Result<()> {
+        match self.fd {
+            -1 => Err(Error::new(FILE_ERR_CODE, FILE_NOT_OPENED)),
+            _ => Ok(()),
+        }
+    }
+    
     /// Otwarcie istniejącego pliku ze wskazanie flag.
     pub fn open_with_flag(&mut self, flag: FLAG) -> Result<()> {
-        if self.fd != -1 {
-            return Err(Error::from(io::Error::new(io::ErrorKind::Other, "File is already opened")));
-        }
+        self.already_opened()?;
+        
         unsafe {
             match libc::open(self.cstr.as_ptr(), flag as i32) {
                 -1 => Err(Error::from_errno()),
@@ -144,11 +161,13 @@ impl File {
                 }
             }
         }
-    }
-
+    } // end of 'open_with_flag'
+    
     /// Utworzenie pliku do zapisu i odczytu.
     /// Jeśli plik już istnieje, zostanie zwrócony błąd.
     pub fn create(&mut self) -> Result<()> {
+        self.already_opened()?;
+        
         unsafe {
             let flags = libc::O_CREAT | libc::O_EXCL | libc::O_RDWR;
             let mode = libc::S_IRWXU | libc::S_IRWXG | libc::S_IROTH;
@@ -160,7 +179,7 @@ impl File {
                 }
             }
         }
-    }
+    } // end of 'create'
     
     /// Zamknięcie pliku (jeśli jest otwarty).
     pub fn close(&mut self) -> Result<()> {
@@ -173,16 +192,15 @@ impl File {
                     self.fd = -1;
                     Ok(())
                 },
-                _ => Err(Error::from(io::Error::last_os_error()))
+                _ => Err(Error::from_errno())
             }
         }
-    }
+    } // end of 'clone'
     
     /// Wyznaczenie liczby bajtów otwartego pliku.
     pub fn size(&self) -> Result<usize> {
-        if self.fd == -1 {
-            return Err(Error::from(io::Error::new(io::ErrorKind::Other, "File is not opened")));       
-        }
+        self.not_opened()?;
+        
         let size = self.seek_end()? - self.seek_begin()?;
         Ok(size)
     }
@@ -191,15 +209,14 @@ impl File {
     /// Czytamy dokładnie tyle bajtów, ile zmieści się do tego wektora.
     /// Odczyt zaczyna się na aktualnej pozycji kursora pliku.
     pub fn read_exact(&self, buffer: &mut [u8]) -> Result<()> {
-        if self.fd == -1 {
-            return Err(Error::from(io::Error::new(io::ErrorKind::Other, "File is not opened")));
-        }
+        self.not_opened()?;
+
         unsafe {
             match libc::read(self.fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len()) {
-                -1 => Err(Error::from(io::Error::last_os_error())),
+                -1 => Err(Error::from_errno()),
                 nbytes => {
                     if nbytes as usize != buffer.len() {
-                        return Err(Error::from(io::Error::new(io::ErrorKind::Other, "Read bytes is not equal to buffer size")));
+                        return Err(Error::new(FILE_ERR_CODE, FILE_READ_ERROR ));
                     }
                     Ok(())
                 }
@@ -209,9 +226,8 @@ impl File {
     
     /// Odczyt całego pliku do wektora bajtów.
     pub fn read_all_vec(&self) -> Result<Vec<u8>> {
-        if self.fd == -1 {
-            return Err(Error::from(io::Error::new(io::ErrorKind::Other, "File is not opened")));
-        }
+        self.not_opened()?;
+
         // Wyznaczenie liczby bajtów w pliku, Kursor pliku jest na początku pliku.
         let nbytes = self.size()?;
         let mut buffer = Vec::with_capacity(nbytes);
@@ -221,20 +237,24 @@ impl File {
     
     /// Odczyt całego pliku jako tekstu.
     pub fn read_all_str(&self) -> Result<String> {
+        self.not_opened()?;
+        
         let data = self.read_all_vec()?;
-        String::from_utf8(data).map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "Invalid UTF-8 sequence")))
+        String::from_utf8(data)
+            .map_err(|e| Error::new(FILE_ERR_CODE, e.to_string().as_str()))
     }
 
     /// Zapis przysłanych bajtów do pliku.
     /// Zapis następuje na aktualnej pozycji kursora pliku.
     pub fn write(&self, buffer: &[u8]) -> Result<()> {
+        self.not_opened()?;
+        
         unsafe {
             match libc::write(self.fd, buffer.as_ptr() as *const libc::c_void, buffer.len()) { 
-                -1 => Err(Error::from(io::Error::last_os_error())),
+                -1 => Err(Error::from_errno()),
                 nbytes => {
                     if nbytes as usize != buffer.len() {
-                        // Niekompletny zapis uznajemy za błąd.
-                        return Err(Error::from(io::Error::new(io::ErrorKind::Other, "Write bytes is not equal to buffer size")));
+                        return Err(Error::new(FILE_ERR_CODE, FILE_WRITE_ERROR));
                     }
                     Ok(())
                 }
@@ -246,15 +266,12 @@ impl File {
     /// Jeśli linia nie kończy się znakiem nowej linii, to zostanie on dodany.
     /// Zapis następuje na aktualnej pozycji kursora pliku.
     pub fn write_line(&self, text: &str) -> Result<()> {
-        if self.fd == -1 {
-            return Err(Error::from(io::Error::new(io::ErrorKind::Other, "File is not opened")));
-        }
-        if text.is_empty() {
-            return Ok(());
-        }
+        self.not_opened()?;
+
         let mut buffer = text.as_bytes().to_vec();
-        if *buffer.last().unwrap() != b'\n' {
-            buffer.push(b'\n');
+        match buffer.last() {
+            Some(b'\n') => (),
+            _ => buffer.push(b'\n'),
         }
         self.write(&buffer)?;
         Ok(())
@@ -274,14 +291,22 @@ impl File {
     }
     #[inline]
     fn seek_to(&self, whence: i32) -> Result<usize> {
+        self.not_opened()?;
+        
         unsafe {
             match  libc::lseek(self.fd, 0, whence) {
-                -1 => Err(Error::from(io::Error::last_os_error())),
+                -1 => Err(Error::from_errno()),
                 offset => Ok(offset as usize),
             }
         }
     }
 }  // 
+
+/********************************************************************
+*                                                                   *
+*              S T A T I C   F U N C T I O N S                      *
+*                                                                   *
+********************************************************************/
 
 pub fn exist(path: &str) -> Result<()> {
     let cpath = CString::new(path).unwrap();
@@ -301,6 +326,31 @@ pub fn rename(from: &str, to: &str) -> Result<()> {
             0 =>  Ok(()),
             _ => Err(Error::from_errno())
         }
+    }
+}
+
+/// Usunięcie pliku.
+/// Przed usunięciem plik zostanie zamknięty.
+pub fn rm(path: &str) -> Result<()> {
+    unsafe {
+        let cpath = CString::new(path).unwrap();
+        match libc::unlink(cpath.as_ptr()) {
+            0 => Ok(()),
+            _ => Err(Error::from_errno())
+        }
+    }
+}
+
+/// Utworzenie nowego pustego pliku.
+pub fn touch(path: &str) -> Result<()> {
+    let stat = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path);
+    match  stat {
+        Ok(_) => Ok(()),
+        Err(err) => Err(Error::from(err))
     }
 }
 

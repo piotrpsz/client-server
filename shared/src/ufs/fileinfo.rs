@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 use std::ffi::{CStr, CString};
 use std::fmt::Debug;
-use std::io;
 use std::ptr::null_mut;
-use crate::ufs::{ Error, Result };
+use crate::xerror::{Result, Error};
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Local, Utc };
+
+const FILEINFO_ERR_CODE:i32 = -2;
+const FILEINFO_INVALID_PATH:&str = "invalid path";
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
 pub enum FileType {
@@ -21,19 +23,19 @@ pub enum FileType {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FileInfo {
-    pub name: String,               // Nazwa pliku (nie ścieżka)
-    pub path: String,                   // Kompletna ścieżka do pliku (dir + name)
-    owner_id: u32,                  // uid
-    owner_name: String,             // nazwa właściciela przypisana do uid
-    group_id: u32,                  // gid
-    group_name: String,             // nazwa grupy przypisana do gid
-    file_type: FileType,            // Typ pliku np. Directory, RegularFile itd.
-    size: u64,                      // Rozmiar pliku w bajtach
-    mode: u32,
-    permissions: String,            // Uprawnienia dostępu np. rwx-r--rw-
-    last_access: DateTime<Utc>,            // Opakowana DateTime<Local>
-    last_modification: DateTime<Utc>,      //           ...
-    last_status_changed: DateTime<Utc>,    //           ...
+    pub name: String,                       // Nazwa pliku (nie ścieżka)
+    pub path: String,                       // Kompletna ścieżka do pliku (dir + name)
+    owner_id: u32,                          // uid
+    owner_name: String,                     // Nazwa właściciela przypisana do uid
+    group_id: u32,                          // gid
+    group_name: String,                     // Nazwa grupy przypisana do gid
+    file_type: FileType,                    // Typ pliku np. Directory, RegularFile itd.
+    size: u64,                              // Rozmiar pliku w bajtach
+    mode: u32,                              // Oryginalna wartość 'mode' ze 'stat'
+    permissions: String,                    // Uprawnienia dostępu np. rwx-r--rw-
+    last_access: DateTime<Utc>,             // Data ostatniego dostępu
+    last_modification: DateTime<Utc>,       // Data ostatniej modyfikacji
+    last_status_changed: DateTime<Utc>,     // Data ostatniej zmiany statusu
 }
 
 impl FileInfo {
@@ -68,11 +70,17 @@ impl FileInfo {
         })
     }
 
+    fn validate_path(path: &str) -> Result<()> {
+        match path.is_empty() {
+            true => Err(Error::new(FILEINFO_ERR_CODE, FILEINFO_INVALID_PATH)),
+            _ => Ok(())
+        }
+    }
+    
     /// Utworzenie obiektu dla pliku określonego ścieżką.
     pub fn for_path(path: &str) -> Result<Self>  {
-        if path.is_empty() {
-            return Err(Error::from(io::Error::new(io::ErrorKind::Other, "Path is empty")));
-        }
+        Self::validate_path(path)?;
+        
         let (path, name) = Self::split_name_and_dir(path)?;
         Ok(Self::new(&name, &path)?)
     }
@@ -88,7 +96,7 @@ impl FileInfo {
         match slashes.last() {
             // Najpierw katalog, później nazwa.
             Some(idx) => Ok((path[..*idx].into(), path[*idx+1..].into())),
-            _ => Err(Error::from(io::Error::new(io::ErrorKind::Other, "Path is invalid")))
+            _ => Ok((path.into(), path.into()))
         }
     }
 
@@ -209,7 +217,7 @@ impl FileInfo {
     }
 
     /// Odczyt informacji o pliku ze wskazaną ścieżką.
-    pub fn stat(path: &str) -> crate::ufs::Result<libc::stat> {
+    pub fn stat(path: &str) -> Result<libc::stat> {
         unsafe {
             let cstr = CString::new(path).unwrap();
             let mut status: libc::stat = std::mem::zeroed();
@@ -223,13 +231,22 @@ impl FileInfo {
     /// Odczyt nazwy użytkownika ze wskazanym uid.
     fn user_name(uid: u32) -> Result<String> {
         unsafe {
-            let passwd = libc::getpwuid(uid);
-            if passwd == null_mut() {
-                return Err(Error::from_errno());
+            match libc::getpwuid(uid) {
+                ptr if ptr == null_mut() => return Err(Error::from_errno()),
+                passwd => {
+                    let name_cstr = CStr::from_ptr((*passwd).pw_name);
+                    let name_str = CStr::from_ptr(name_cstr.as_ptr()).to_str().unwrap();
+                    Ok(name_str.into())
+                }
             }
-            let name_cstr = CStr::from_ptr((*passwd).pw_name);
-            let name_str = CStr::from_ptr(name_cstr.as_ptr()).to_str().unwrap();
-            Ok(name_str.into())
+            
+            // let passwd = libc::getpwuid(uid);
+            // if passwd == null_mut() {
+            //     return Err(Error::from_errno());
+            // }
+            // let name_cstr = CStr::from_ptr((*passwd).pw_name);
+            // let name_str = CStr::from_ptr(name_cstr.as_ptr()).to_str().unwrap();
+            // Ok(name_str.into())
         }
     }
 

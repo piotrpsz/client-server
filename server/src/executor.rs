@@ -1,4 +1,4 @@
-use std::{io, env, fs};
+use std::{io::ErrorKind, env, fs};
 use shared::data::{
     answer::Answer,
     request::Request,
@@ -6,28 +6,42 @@ use shared::data::{
 
 use shared::ufs::dir::Dir;
 use shared::ufs::file::{self, File };
+use shared::xerror::{ Result, Error };
 
-static SEPERATOR: &str = "/";
+static EXEC_ERR_CODE: i32 = -4;
+static EXEC_INVALID_ENTRY_NAME: &str = "invalid entry name";
+static EXEC_INVALID_PARAMETERS: &str = "invalid number of parameters";
+static EXEC_FILE_ALREADY_EXISTS: &str = "file already exists";
+static EXEC_FILE_NOT_FOUND: &str = "ile not found";
+static EXEC_NO_PARAMETERS: &str = "no call parameters";
+static EXEC_NO_SUCH_COMMAND: &str = "no such command";
+
 pub struct Executor;
 
 impl Executor {
-    pub fn execute(request: Request) -> io::Result<Answer> {
+    pub fn execute(request: Request) -> Result<Answer> {
+        let params = request.params.as_slice();
         match request.command.as_str() {
             "pwd" => Self::pwd(),
-            "cd" => Self::cd(request.params),
-            "mkdir" => Self::mkdir(request.params),
-            "ls" | "ll" => Self::ls(request.params),
-            "la" => Self::la(request.params),
-            "touch" => Self::touch(request.params),
-            "rm" => Self::rm(request.params),
-            "rmdir" => Self::rmdir(request.params),
-            "rename" | "move" => Self::move_file(request.params),
-            "exe" => Self::execute_cmd(request.params),
-            _ => Err(io::Error::new(io::ErrorKind::Other, "command not found"))
+            "cd" => Self::cd(params),
+            "mkdir" => Self::mkdir(params),
+            "ls" | "ll" => Self::ls(params),
+            "la" => Self::la(params),
+            "touch" => Self::touch(params),
+            "rm" => Self::rm(params),
+            "rmdir" => Self::rmdir(params),
+            "rename" | "move" => Self::move_file(params),
+            "exe" => Self::execute_cmd(params),
+            _ => Err(Error::new(EXEC_ERR_CODE, EXEC_NO_SUCH_COMMAND))
         }
     }
 
-    fn execute_cmd(params: Vec<String>) -> io::Result<Answer> {
+    fn validate_params(params: &[String]) -> Result<()> {
+        match params.is_empty() {
+            true => Err(Error::with_error_kind(EXEC_ERR_CODE, ErrorKind::InvalidData, EXEC_NO_PARAMETERS)),
+            false => Ok(()) }
+    }
+    fn execute_cmd(params: &[String]) -> Result<Answer> {
         use std::process::Command;
 
         let mut cmd = Command::new(params[0].as_str());
@@ -45,19 +59,19 @@ impl Executor {
     }
     
     /// pwd - print working directory
-    fn pwd() -> io::Result<Answer> {
+    fn pwd() -> Result<Answer> {
         match env::current_dir() {
             Ok(path) => {
                 let mut answer = Answer::new(0, "OK", "pwd");
                 answer.data.push(path.to_str().unwrap().to_string());
                 Ok(answer)
             },
-            Err(why) => Err(why),
+            Err(err) => Err(Error::from(err)),
         }
     }
 
     /// cd - change directory
-    fn cd(params: Vec<String>) -> io::Result<Answer> {
+    fn cd(params: &[String]) -> Result<Answer> {
         let mut path = match params.is_empty() {
             // Jeśli nie podano katalogu (brak parametru) to idziemy do katalogu domowego.
             true => "~".to_string(),
@@ -75,91 +89,116 @@ impl Executor {
                 answer.data.push(env::current_dir()?.to_str().unwrap().to_string());
                 Ok(answer)
             },
-            Err(why) => Err(why)
+            Err(err) => Err(Error::from(err))
         }
     }
     
     /// mkdir - create directory
-    fn mkdir(params: Vec<String>) -> io::Result<Answer> {
-        if params.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "No call parameters"));
-        }
+    fn mkdir(params: &[String]) -> Result<Answer> {
+        Self::validate_params(params)?;
 
-        for param in &params {
-            match param.contains(SEPERATOR) {
-                true => fs::create_dir_all(param)?,
-                false => fs::create_dir(param)?
-            }
-        }
-        Ok(Answer::new_with_data(0, "OK", "mkdir", params))
+        let made: Result<Vec<_>> = params.iter()
+            .filter(|path| Self::is_regular_name(path).is_ok())
+            .map(|path| {
+                match fs::create_dir_all(path) {
+                    Ok(_) => Ok(path.clone()),
+                    Err(err) => Err(Error::from(err))
+                }
+            })
+            .collect();
+
+        // for param in params {
+        //     match param.contains(SEPERATOR) {
+        //         true => fs::create_dir_all(param)?,
+        //         false => fs::create_dir(param)?
+        //     }
+        // }
+        Ok(Answer::new_with_data(0, "OK", "mkdir", made?))
     }
     
-    /// ls - list directory
-    fn ls(params: Vec<String>) -> io::Result<Answer> {
+    /// Odczyt zawartości katalogu bez plików ukrytych.
+    /// Dopuszczalny jest brak parametrów (odczyt aktualnego katalogu).
+    fn ls(params: &[String]) -> Result<Answer> {
         let data = Self::readdir(params, false)?;
         Ok(Answer::new_with_data(0, "OK", "ls", data))
     }
     
-    /// la - list directory with hidden files
-    fn la(params: Vec<String>) -> io::Result<Answer> {
+    /// Odczytanie zawartości katalogu wraz z plikami ukrytymi.
+    /// Dopuszczalny jest brak parametrów (odczyt aktualnego katalogu). 
+    fn la(params: &[String]) -> Result<Answer> {
         let data = Self::readdir(params, true)?;
         Ok(Answer::new_with_data(0, "OK", "la", data))
     }
     
     /// Odczyt zawartości katalogu, ze wskazaniem czy uwzględniać pliki ukryte.
-    fn readdir(params: Vec<String>, hidden_too: bool) -> io::Result<Vec<String>> {
+    fn readdir(params: &[String], hidden_too: bool) -> Result<Vec<String>> {
         let dir = match params.is_empty() {
             // Jeśli nie podano katalogu (brak parametru) to czytamy aktualny katalog.
             true => ".".to_string(),
             false => params[0].clone()
         };
-            
+
+
         let files = Dir::read(&dir, hidden_too)?;
             
-        // Zamiana informacji o plikach na wektor JSON.
-        let mut data = vec![];
-        for fi in files {
-            data.push(fi.to_json()?);
-        }
+        // Zamiana informacji o plikach (fileinfo) na wektor JSON.
+        let data = files
+            .iter()
+            .map(|fi| fi.to_json().unwrap())
+            .collect();
+
         Ok(data)
     }
     
     /// Utworzenie pustego pliku.
-    fn touch(params: Vec<String>) -> io::Result<Answer> {
-        for item in &params {
-            let retv = File::new(item).touch();
-            if let Some(err) = retv.err() {
-                return Err(err.into())
-            }
-        }
-        Ok(Answer::new_with_data(0, "OK", "touch", params))
+    fn touch(params: &[String]) -> Result<Answer> {
+        Self::validate_params(&params)?;
+
+        let made: Result<Vec<String>> = params.into_iter()
+            .filter(|path| Self::is_regular_name(path).is_ok())
+            .map(|path| {
+                match file::touch(path) {
+                    Ok(_) => Ok(path.clone()),
+                    Err(err) => Err(err)
+                }
+            })
+            .collect();
+
+        Ok(Answer::new_with_data(0, "OK", "touch", made?))
     }
     
     /// Usunięcie pliku
-    fn rm(params: Vec<String>) -> io::Result<Answer> {
-        for item in &params {
-            let retv = File::new(item).rm();
-            if let Some(err) = retv.err() {
-                return Err(err.into())
-            }       
-        }
-        Ok(Answer::new_with_data(0, "OK", "rm", params))
+    fn rm(params: &[String]) -> Result<Answer> {
+        Self::validate_params(&params)?;
+
+        let made: Result<Vec<String>> = params.into_iter()
+            .filter( |path| Self::is_regular_name(path).is_ok() )
+            .map( |path| {
+                match file::rm(path) {
+                    Ok(_) => Ok(path.clone()),
+                    Err(err) => Err(err)
+                }
+            })
+            .collect();
+
+        Ok(Answer::new_with_data(0, "OK", "rm", made?))
     }
     
-    fn rmdir(params: Vec<String>) -> io::Result<Answer>{
-        if params.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "No call parameters"));
-        }
+    fn rmdir(params: &[String]) -> Result<Answer>{
+        Self::validate_params(params)?;
+
         match params[0].as_str() {
             "-r" => Self::rm_directories_with_content(&params[1..]),
-            _ => Self::rm_directories(params.as_slice())
+            _ => Self::rm_directories(params)
         }
     }
     
     /// Standardowa funkcja usuwani katalogu.
     /// UWAGA: katalog musi być pusty.
-    fn rm_directories(paths: &[String]) -> io::Result<Answer> {
-        let removed: Result<Vec<String>, _> = paths.to_vec()
+    fn rm_directories(paths: &[String]) -> Result<Answer> {
+        Self::validate_params(paths)?;
+
+        let made: Result<Vec<String>> = paths.to_vec()
             .iter()
             .filter(|path| {
                 Self::is_regular_name(path).is_ok()
@@ -172,11 +211,9 @@ impl Executor {
             })
             .collect();
         
-        match removed {
-            Ok(v) => Ok(Answer::new_with_data(0, "OK", "rmdir", v)),
-            Err(err) => Err(err.into())
-        }
+        Ok(Answer::new_with_data(0, "OK", "rmdir", made?))
     }
+
 /*
     fn execute_with_fn<F>(fn_executor: F, paths: &[String]) -> io::Result<Answer>
         where F: Fn(&str) -> io::Result<Answer>
@@ -201,8 +238,10 @@ impl Executor {
     }
  */
     
-    fn rm_directories_with_content(paths: &[String]) -> io::Result<Answer> {
-        let removed: Result<Vec<String>, _> = paths.to_vec()
+    fn rm_directories_with_content(paths: &[String]) -> Result<Answer> {
+        Self::validate_params(paths)?;
+
+        let made: Result<Vec<String>> = paths.to_vec()
             .iter()
             .filter(|path| {
                 Self::is_regular_name(path).is_ok()
@@ -215,68 +254,65 @@ impl Executor {
             })
             .collect();
 
-        match removed {
-            Ok(v) => Ok(Answer::new_with_data(0, "OK", "rmdir", v)),
-            Err(err) => Err(err)
-        }
+        Ok(Answer::new_with_data(0, "OK", "rmdir", made?))
     }
-    
-    fn rm_directory_with_content(path: &str) -> io::Result<()> {
-        if Self::is_regular_name(path).is_ok() {
-            let content = Dir::read(path, true)?;
-            for fi in content {
-                if fi.is_dir() {
-                    Self::rm_directory_with_content(fi.path.as_str())?;
-                } else {
-                    File::new(fi.path.as_str()).rm()?;
-                }
-            }
-            Dir::rmdir(path)?;
-        }
-        Ok(())
-    }
-    
-    fn move_file(paths: Vec<String>) -> io::Result<Answer> {
-        if paths.len() != 2 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid number of parameters"));
-        }
-        let from = paths[0].as_str();
-        let to = paths[1].as_str();
-        
-        if file::exist(to).is_ok() {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "File already exists"));
-        }
-        if file::exist(from).is_err() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "File not found"));
-        }
-        file::rename(from, to)?;
-        Ok(Answer::new_with_data(0, "OK", "rmdir", paths))
-    }
-    
 
-    
     /// Sprawdzenie, czy ścieżka wskazuje na normalny katalog.
     /// Normalny katalog to ten, którego nazwa nie jest '.' i '..'.
-    fn is_regular_name(path: &str) -> io::Result<()> {
+    fn is_regular_name(path: &str) -> Result<()> {
         // Wyznaczenie wszystkich pozycji znaku '/'.
         let items = path.bytes()
             .enumerate()
             .filter(|(_, c)| *c == b'/')
             .map(|(i, _)| i)
             .collect::<Vec<_>>();
-        
+
         let name = match items.last() {
             // Wyznaczenie ostatniej części ścieżki, czyli nazwę.
             Some(v) => path[v + 1..].to_string(),
             // Brak znaków '/' - ścieżki jest pojedyńczym wyrazem, który jest nazwą.
-            _ => path.to_string()  
+            _ => path.to_string()
         };
-        
+
         match name.as_str() {
-            "." | ".."  => Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid entry name")),
+            "." | ".." => Err(Error::new(EXEC_ERR_CODE, EXEC_INVALID_ENTRY_NAME)),
             _ => Ok(())
         }
     }
+
+    fn rm_directory_with_content(path: &str) -> Result<()> {
+        Self::is_regular_name(path)?;
+
+        let content = Dir::read(path, true)?;
+        for fi in content {
+            if fi.is_dir() {
+                Self::rm_directory_with_content(fi.path.as_str())?;
+            } else {
+                File::new(fi.path.as_str()).rm()?;
+            }
+        }
+        Dir::rmdir(path)
+    }
+
+    /// Przeniesienie pliku lub zmiana jego nazwy.
+    fn move_file(paths: &[String]) -> Result<Answer> {
+        if paths.len() != 2 {
+            return Err(Error::with_error_kind(EXEC_ERR_CODE, ErrorKind::InvalidData, EXEC_INVALID_PARAMETERS));
+        }
+
+        let from = paths[0].as_str();
+        let to = paths[1].as_str();
+        if file::exist(to).is_ok() {
+            return Err(Error::with_error_kind(EXEC_ERR_CODE, ErrorKind::AlreadyExists, EXEC_FILE_ALREADY_EXISTS));
+        }
+        if file::exist(from).is_err() {
+            return Err(Error::with_error_kind(EXEC_ERR_CODE, ErrorKind::NotFound, EXEC_FILE_NOT_FOUND));
+        }
+
+        file::rename(from, to)?;
+        Ok(Answer::new_with_data(0, "OK", "rmdir", paths.to_vec()))
+    }
+
 }
 
 

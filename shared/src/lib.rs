@@ -6,6 +6,7 @@ pub mod sqlite;
 pub mod crypto;
 pub mod net;
 pub mod ufs;
+pub mod xerror;
 
 // #[macro_export]
 // macro_rules! fpos {

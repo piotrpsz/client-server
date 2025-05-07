@@ -128,7 +128,7 @@ fn main() -> Result<(), Box<dyn Error>>{
                         }
                     }
                 }
-            };
+            }
         }
     });
     
@@ -189,11 +189,7 @@ fn one_loop(conn: &mut Connector) -> io::Result<()> {
             Ok(())
         },
         Err(err) => {
-            let code = err.raw_os_error().unwrap_or(-1);
-            let message = err.to_string();
-            let kind = err.kind().to_string();
-            
-            let answer = Answer::new_with_data(code, "ERROR", "rm", vec![message, kind]);
+            let answer = Answer::from(err);
             match conn.send_answer(answer) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(e)

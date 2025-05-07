@@ -4,21 +4,20 @@ extern crate libc;
 use std::cmp::Ordering;
 use std::ffi::{CStr, CString};
 use std::ptr::null_mut;
-use crate::ufs::{Error, Result};
 use crate::ufs::fileinfo::FileInfo;
-
+use crate::xerror::{ Result, Error };
 
 
 pub struct Dir;
 
 impl Dir {
     /// Odczyt zawartości wskazanego katalogu.
-    pub fn read(path: &str, hidden_too: bool) -> Result<Vec<FileInfo>>{
+    pub fn read(path: &str, hidden_too: bool) -> Result<Vec<FileInfo>> {
         eprintln!("{}", path);
         
         unsafe {
             let mut files: Vec<FileInfo> = vec![];
-            let dirp = Self::opendir(path)?;
+            let dirp = Self::open_dir(path)?;
             
             loop {
                 let dirent = libc::readdir(dirp);
@@ -106,7 +105,7 @@ impl Dir {
     }
     
     /// Otwarcie do odczytu wskazanego katalogu.
-    fn opendir(path: &str) -> Result<*mut libc::DIR> {
+    fn open_dir(path: &str) -> Result<*mut libc::DIR> {
         unsafe {
             let c_path = CString::new(path).unwrap();
             match libc::opendir(c_path.as_ptr()) {
@@ -126,7 +125,3 @@ impl Dir {
         }
     }
 }
-
-
-
-

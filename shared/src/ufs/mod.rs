@@ -1,3 +1,8 @@
+pub mod dir;
+pub mod fileinfo;
+pub mod file;
+
+/*
 use std::ffi::CStr;
 use std::fmt::Display;
 use std::io;
@@ -6,15 +11,13 @@ use std::io::ErrorKind::Other;
 use serde_json;
 use crate::data::answer::Answer;
 
-pub mod dir;
-pub mod fileinfo;
-pub mod file;
+
 
 
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
-pub struct Error {
+pub struct CError {
     pub code: i32,
     pub message: String,
     pub kind: ErrorKind
@@ -65,3 +68,4 @@ impl Display for Error {
     }   
 }
 
+*/

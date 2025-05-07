@@ -1,16 +1,14 @@
 use shared::data::{
     request::Request
 };
-
-use std::io;
 use std::io::{ stdin, ErrorKind};
 use std::net::*;
 use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
 use shared::ufs::fileinfo::FileInfo;
-use shared::ufs::Error;
+use shared::xerror::{ Error, Result };
 
-fn main() -> io::Result<()>{
+fn main() -> Result<()>{
     let addr = SocketAddr::from(([127, 0, 0, 1], 25105));
     match TcpStream::connect(addr) {
         Ok(socket) => {
@@ -27,7 +25,7 @@ fn main() -> io::Result<()>{
     Ok(())
 }
 
-fn handle_connection(stream: TcpStream) -> io::Result<()> {
+fn handle_connection(stream: TcpStream) -> Result<()> {
     let mut conn = Connector::new(stream.try_clone()?, ConnectionSide::Client);
     conn.init()?;
     
@@ -81,7 +79,7 @@ fn display_answer(answer: Answer) {
                 }
             }
         },
-        _ => println!("{}", Error::from(answer))
+        _ => println!("{:?}", Error::from(answer))
     };
 }
 

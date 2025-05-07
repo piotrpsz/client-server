@@ -1,2 +1,2 @@
 # Client - Server
-Communication between client and swerver in Rust
+Encrypted communication between client and server in Rust

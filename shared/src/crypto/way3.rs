@@ -25,17 +25,14 @@ impl Way3 {
         if key.len() != KEY_SIZE {
             return Err("invalid key size");
         }
-        let mut k = [0u32; 3];
-        let mut ki = [0u32; 3];
-        unsafe {
-            let ptr = key.as_ptr() as *const u32;
-            k[0] = *ptr;
-            k[1] = *(ptr.offset(1));
-            k[2] = *(ptr.offset(2));
-            ki[0] = *ptr;
-            ki[1] = *(ptr.offset(1));
-            ki[2] = *(ptr.offset(2));
-        }
+
+        let k: [u32; 3] = [
+            u32::from_be_bytes(key[0..4].try_into().unwrap()),
+            u32::from_be_bytes(key[4..8].try_into().unwrap()),
+            u32::from_be_bytes(key[8..12].try_into().unwrap())
+        ];
+        let mut ki = k;
+        
         Self::mu(Self::theta(&mut ki));
         Ok(Way3 { k, ki })
     }
@@ -135,11 +132,10 @@ impl Way3 {
                 let plain_block = self.decrypt_block(cipher_block);
                 block3_to_bytes(plain_block, &mut plain[i..i+BLOCK_SIZE]);
             });
-        
-        match pad_index(&plain) {
-            Some(idx) => plain[..idx].to_vec(),
-            _ => plain,
-        }
+
+        pad_index(&plain)
+            .map(|idx| plain[..idx].to_vec())
+            .unwrap_or(plain)
     }
 
     /****************************************************************
@@ -225,12 +221,12 @@ impl Way3 {
             b0 <<= 1;
             b1 <<= 1;
             b2 <<= 1;
-            if (a0 & 1) != 0 { b2 |= 1; }
-            if (a1 & 1) != 0 { b1 |= 1; }
-            if (a2 & 1) != 0 { b0 |= 1; }
-            // b0 |= a2 & 1;
-            // b1 |= a1 & 1;
-            // b2 |= a0 & 1;
+            // if (a0 & 1) != 0 { b2 |= 1; }
+            // if (a1 & 1) != 0 { b1 |= 1; }
+            // if (a2 & 1) != 0 { b0 |= 1; }
+            b0 |= a2 & 1;
+            b1 |= a1 & 1;
+            b2 |= a0 & 1;
             a0 >>= 1;
             a1 >>= 1;
             a2 >>= 1;

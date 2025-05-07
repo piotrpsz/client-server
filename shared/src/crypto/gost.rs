@@ -238,10 +238,9 @@ impl Gost {
                 block_to_bytes(plain_block, &mut plain[i..i+BLOCK_SIZE]);
             });
 
-        match pad_index(&plain) {
-            Some(idx) => plain[..idx].to_vec(),
-            None => plain,
-        }
+        pad_index(&plain)
+            .map(|idx| plain[..idx].to_vec())
+            .unwrap_or(plain)
     }
 
     /****************************************************************
@@ -270,7 +269,8 @@ impl Gost {
                 let w0 = plain_block.0 ^ cipher_block.0;
                 let w1 = plain_block.1 ^ cipher_block.1;
                 cipher_block = self.encrypt(w0, w1);
-                block_to_bytes(cipher_block, &mut cipher[(i + BLOCK_SIZE)..(i+BLOCK_SIZE+8)]);            
+                let pos = i + BLOCK_SIZE;
+                block_to_bytes(cipher_block, &mut cipher[pos..pos+BLOCK_SIZE]);            
             });
         
         cipher

@@ -70,11 +70,11 @@ fn display_answer(answer: Answer) {
         "OK" => {
             if !answer.data.is_empty() {
                 match answer.cmd.as_str() {
-                    "pwd" => print_pwd_answer(answer.data),
-                    "cd" => print_cd_answer(answer.data),
-                    "mkdir" => print_mkdir_answer(answer.data),
-                    "ls" | "la" => print_lsa_answer(answer.data),
-                    "rmdir" => print_rmdir_answer(answer.data),
+                    "pwd" => print_common(answer.data),
+                    "cd" => print_common(answer.data),
+                    "mkdir" => print_common(answer.data),
+                    "ls" | "la" => print_file_info(answer.data),
+                    "rmdir" => print_common(answer.data),
                     "exe" => print_exe_answer(answer.data),
 
                     _ => println!("{:?}", answer),
@@ -85,32 +85,17 @@ fn display_answer(answer: Answer) {
     };
 }
 
-fn print_pwd_answer(data: Vec<String>) {
-    println!("{}", data[0]);
+fn print_common(data: Vec<String>) {
+    data.iter()
+        .for_each(|item| println!("{}", item));
 }
 
-fn print_cd_answer(data: Vec<String>) {
-    println!("{}", data[0]);
-}
-
-fn print_mkdir_answer(data: Vec<String>) {
-    for item in data {
-        println!("{}", item);
-    }
-}
-
-fn print_lsa_answer(data: Vec<String>) {
+fn print_file_info(data: Vec<String>) {
     data.iter()
         .for_each(|item| {
-            let fi = FileInfo::from_json(item.as_bytes()).unwrap();
-            println!("{}", fi)
+            let fi = FileInfo::from_json(item.as_ref()).unwrap();
+            println!("{}", fi);
         });
-}
-
-fn print_rmdir_answer(data: Vec<String>) {
-    for item in data {
-        println!("{}", item);
-    }
 }
 
 fn print_exe_answer(data: Vec<String>) {

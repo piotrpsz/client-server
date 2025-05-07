@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, iv_fill, pad_index, rnd_bytes};
+use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, iv_fill, pad_index};
 
 const BLOCK_SIZE: usize = 8;
 pub const MIN_KEY_SIZE: usize = 4;
@@ -584,6 +584,7 @@ const ORIG_S: [[u32; 256]; 4] = [
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::tool::rnd_bytes;
     use super::*;
 
     #[test]

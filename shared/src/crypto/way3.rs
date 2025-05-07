@@ -1,7 +1,7 @@
 // https://github.com/stamparm/cryptospecs/blob/master/symmetrical/sources/3-way.c
 // http://www.users.zetnet.co.uk/hopwood/crypto/scan/cs.html#3-Way
 
-use crate::crypto::tool::{align_to_block, bytes_to_block3, block3_to_bytes, pad_index, iv_block};
+use crate::crypto::tool::{align_to_block, bytes_to_block3, block3_to_bytes, pad_index, iv_fill};
 
 const NMBR: usize = 11;             // Liczba rund
 const BLOCK_SIZE: usize = 12;       // 3xu32: 12 bajtów
@@ -157,7 +157,7 @@ impl Way3 {
         
         let plain = align_to_block(input, BLOCK_SIZE);
         let mut cipher = vec![0u8; BLOCK_SIZE + plain.len()];
-        iv_block(&mut cipher[0..BLOCK_SIZE]);
+        iv_fill(&mut cipher[0..BLOCK_SIZE]);
         
         let mut cipher_block = bytes_to_block3(&cipher);
         plain.iter()

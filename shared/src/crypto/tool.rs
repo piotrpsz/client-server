@@ -29,7 +29,10 @@ pub fn rnd_bytes(nbytes: usize) -> Vec<u8> {
     buffer
 }
 
-pub(crate) fn iv_block(buffer: &mut [u8]) {
+/// Wypełnienie wskazanego bufora losowymi bajtami.
+/// Te losowe bajty to tzw. wektor IV.
+/// Wypełniony zostanie cały bufor (standardowo BLOCK_SIZE). 
+pub(crate) fn iv_fill(buffer: &mut [u8]) {
     rand::rng().fill_bytes(buffer);
 }
 

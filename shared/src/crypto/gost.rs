@@ -1,4 +1,4 @@
-use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, iv_block, pad_index};
+use crate::crypto::tool::{align_to_block, block_to_bytes, bytes_to_block, iv_fill, pad_index};
 
 const BLOCK_SIZE: usize = 8;
 // 8 bytes = 2 u32 = 54 bit
@@ -259,7 +259,7 @@ impl Gost {
 
         let plain = align_to_block(input, BLOCK_SIZE);
         let mut cipher = vec![0u8; BLOCK_SIZE + plain.len()];
-        iv_block(&mut cipher[0..BLOCK_SIZE]);
+        iv_fill(&mut cipher[0..BLOCK_SIZE]);
 
         let mut cipher_block = bytes_to_block(&cipher);
         plain.iter()

@@ -1,17 +1,17 @@
 // MIT License
-// 
+//
 // Copyright (c) 2025 Piotr Pszczółkowski
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -29,6 +29,7 @@ use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
 use shared::ufs::fileinfo::FileInfo;
 use shared::xerror::{ Error, Result };
+use ansi_term::Colour::{ Yellow, Red };
 
 fn main() -> Result<()>{
     let addr = SocketAddr::from(([127, 0, 0, 1], 25105));
@@ -55,7 +56,8 @@ fn handle_connection(stream: TcpStream) -> Result<()> {
     loop {
         // Odczytaj z terminala polecenie wraz z argumentami.
         input.clear();
-        eprint!("cmd> ");
+        eprint!("{}", Yellow.paint("cmd> "));
+        // eprint!("cmd> ");
         stdin().read_line(&mut input)?;
         input = input.trim().to_string();
         if input.is_empty() {
@@ -85,7 +87,7 @@ fn handle_connection(stream: TcpStream) -> Result<()> {
 
 fn display_answer(answer: Answer) {
     // eprintln!("{:?}", answer);
-    
+
     match answer.message.as_str() {
         "OK" => {
             if !answer.data.is_empty() {
@@ -101,7 +103,11 @@ fn display_answer(answer: Answer) {
                 }
             }
         },
-        _ => println!("{:?}", Error::from(answer))
+        _ => {
+            let err = Error::from(answer);
+            let err_str = format!("{:?}", err);
+            eprintln!("{}", Red.paint(err_str))
+        }
     };
 }
 

@@ -1,2 +1,42 @@
 #V2
 ala
+pwd
+dd
+asd
+ls
+la
+ls -al
+la
+ll
+pwd
+ls
+ls -l
+la
+ls
+ls -l
+la
+ll
+la
+ll
+la
+pwd
+ls
+ll
+la
+pwd
+ll
+pwd
+cd
+cd ~
+pwd
+cd
+pwd
+la
+ll
+ls
+la
+ll
+la
+ls
+ls -l
+cd

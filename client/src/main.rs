@@ -82,15 +82,14 @@ fn handle_connection(stream: TcpStream) -> Result<()> {
 fn serve_line(conn: &mut Connector, line: String) -> Result<()>{
     let line = line.trim().to_string();
     if !line.is_empty() {
-        println!("{}", line);
         let tokens = line.split_whitespace().collect::<Vec<&str>>();
-        let command = tokens[0];
+        let command = tokens[0].to_string();
         let args = tokens[1..]
             .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>();
+            .map(|item| item.to_string())
+            .collect();
         
-        let request = Request::new(command.into(), args);
+        let request = Request::new(command, args);
         conn.send_request(request)?;
         let answer = conn.read_answer()?;
         display_answer(answer);
@@ -103,16 +102,24 @@ fn display_answer(answer: Answer) {
         "OK" => {
             if !answer.data.is_empty() {
                 match answer.cmd.as_str() {
-                    "pwd" => print_common(answer.data),
-                    "cd" => print_common(answer.data),
-                    "mkdir" => print_common(answer.data),
-                    "ls" | "la" => print_file_info(answer.data),
-                    "rmdir" => print_common(answer.data),
-                    "exe" => print_exe_answer(answer.data),
-
-                    _ => println!("{:?}", answer),
+                    "ll" | "la" => print_file_info(answer.data),
+                    _ => print_common(answer.data),
                 }
             }
+            
+            // print_common(answer.data);
+            // if !answer.data.is_empty() {
+            //     match answer.cmd.as_str() {
+            //         "pwd" => print_common(answer.data),
+            //         "cd" => print_common(answer.data),
+            //         "mkdir" => print_common(answer.data),
+            //         "ls" | "la" => print_file_info(answer.data),
+            //         "rmdir" => print_common(answer.data),
+            //         "exe" => print_exe_answer(answer.data),
+            // 
+            //         _ => println!("{:?}", answer),
+            //     }
+            // }
         },
         _ => {
             let err = Error::from(answer);
@@ -124,26 +131,18 @@ fn display_answer(answer: Answer) {
 
 fn print_common(data: Vec<String>) {
     data.iter()
-        .for_each(|item| println!("{}", item));
+         .for_each(|item| {
+            if !item.is_empty() {
+                println!("{}", item)
+            }
+        });
 }
 
 fn print_file_info(data: Vec<String>) {
     data.iter()
         .for_each(|item| {
-            let fi = FileInfo::from_json(item.as_ref()).unwrap();
+            let fi = FileInfo::from_json(item.as_bytes()).unwrap();
             println!("{}", fi);
         });
 }
 
-fn print_exe_answer(data: Vec<String>) {
-    data[0].split('\n').for_each(|line| {
-        if !line.is_empty() {
-            println!("{}", line)
-        }
-    });
-    data[1].split('\n').for_each(|line| {
-        if !line.is_empty() {
-            println!("{}", line)
-        }
-    });
-}

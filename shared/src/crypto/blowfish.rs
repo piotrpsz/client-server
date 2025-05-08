@@ -257,7 +257,25 @@ impl Blowfish {
             .map(|idx| plain[..idx].to_vec())
             .unwrap_or(plain)
     }
+    pub fn decrypt_ecb_ext(&self, cipher: &[u8]) -> Vec<u8> {
+        if cipher.is_empty() || cipher.len() % BLOCK_SIZE != 0 {
+            return vec![];
+        }
+        let mut plain = vec![0u8; cipher.len()];
 
+        cipher.iter()
+            .enumerate()
+            .step_by(BLOCK_SIZE)
+            .for_each(|(i, _)| {
+                let cipher_block = bytes_to_block(&cipher[i..]);
+                let plain_block = self.decrypt_block(cipher_block);
+                block_to_bytes(plain_block, &mut plain[i..i+BLOCK_SIZE]);
+            });
+
+        pad_index(&plain)
+            .map(|idx| plain[..idx].to_vec())
+            .unwrap_or(plain)
+    }
     /****************************************************************
     *                                                               *
     *                            C B C                              *

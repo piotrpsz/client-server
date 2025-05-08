@@ -230,7 +230,7 @@ impl Blowfish {
             .for_each(|(i, _)| {
                 let plain_block = bytes_to_block(&plain[i..]);
                 let cipher_block = self.encrypt_block(plain_block);
-                block_to_bytes(cipher_block, &mut cipher[i..]);
+                block_to_bytes(cipher_block, &mut cipher[i..i+BLOCK_SIZE]);
             });
         
         cipher
@@ -250,7 +250,7 @@ impl Blowfish {
             .for_each(|(i, _)| {
                 let cipher_block = bytes_to_block(&cipher[i..]);
                 let plain_block = self.decrypt_block(cipher_block);
-                block_to_bytes(plain_block, &mut plain[i..]);
+                block_to_bytes(plain_block, &mut plain[i..i+BLOCK_SIZE]);
             });
 
         pad_index(&plain)
@@ -607,7 +607,7 @@ const ORIG_S: [[u32; 256]; 4] = [
 mod tests {
     use crate::crypto::tool::rnd_bytes;
     use super::*;
-
+    
     #[test]
     fn test_block() {
         let plain = (1u32, 2u32);
@@ -628,10 +628,10 @@ mod tests {
 
         let bf = bf.unwrap();
         let plain = [
-            // "".as_bytes(),
+            "".as_bytes(),
             "Piotr".as_bytes(),
-            // "Piotr Włodzimierz Pszczółkowski".as_bytes(),
-            // "Yamato & Musashi".as_bytes(),
+            "Piotr Włodzimierz Pszczółkowski".as_bytes(),
+            "Yamato & Musashi".as_bytes(),
         ];
 
         for text in plain.iter() {

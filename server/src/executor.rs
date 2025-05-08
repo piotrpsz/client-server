@@ -20,12 +20,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{io::ErrorKind, env, fs};
+use std::{
+    io::ErrorKind, 
+    env, 
+    fs,
+    process::Command
+};
 use shared::data::{
     answer::Answer,
     request::Request,
 };
-
 use shared::ufs::dir::Dir;
 use shared::ufs::file::{self, File };
 use shared::xerror::{ Result, Error };
@@ -63,8 +67,14 @@ impl Executor {
             true => Err(Error::with_error_kind(EXEC_ERR_CODE, ErrorKind::InvalidData, EXEC_NO_PARAMETERS)),
             false => Ok(()) }
     }
+    
+    fn execute_command(cmd: &str, args: &[String]) -> Result<Answer> {
+        
+        Ok(Answer::new(0, "OK", "exe"))    
+    }
+    
     fn execute_cmd(params: &[String]) -> Result<Answer> {
-        use std::process::Command;
+        
 
         let mut cmd = Command::new(params[0].as_str());
         for param in &params[1..] {

@@ -99,8 +99,6 @@ fn serve_line(conn: &mut Connector, line: String) -> Result<()>{
 }
 
 fn display_answer(answer: Answer) {
-    // eprintln!("{:?}", answer);
-
     match answer.message.as_str() {
         "OK" => {
             if !answer.data.is_empty() {

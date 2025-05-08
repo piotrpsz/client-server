@@ -20,18 +20,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use shared::data::{
-    request::Request,
-    answer::Answer
-};
-use std::io::ErrorKind;
-use std::net::*;
+use shared::data::{request::Request, answer::Answer};
+use std::{net::*, io::ErrorKind};
 use shared::net::connector::{ConnectionSide, Connector};
 use shared::ufs::fileinfo::FileInfo;
-use shared::xerror::{ Error, Result };
-use ansi_term::Colour::{ Yellow, Red };
-use rustyline::{ DefaultEditor, error::ReadlineError };
+use shared::xerror::{Error, Result};
+use ansi_term::Colour::*;
+use rustyline::{
+    DefaultEditor,
+    error::ReadlineError,
+    KeyEvent,
+    Event,
+    ConditionalEventHandler,
+    RepeatCount,
+    EventContext,
+    Cmd,
+    EventHandler};
+use rustyline::Cmd::{AcceptLine};
 
+static mut REMOTE_HOST: bool = true;
 
 fn main() -> Result<()>{
     let addr = SocketAddr::from(([127, 0, 0, 1], 25105));
@@ -50,26 +57,47 @@ fn main() -> Result<()>{
     Ok(())
 }
 
+struct SwitchContext;
+impl ConditionalEventHandler for SwitchContext {
+    fn handle(&self, _evt: &Event, _n: RepeatCount, _positive: bool, _ctx: &EventContext) -> Option<Cmd> {
+        unsafe { REMOTE_HOST = !REMOTE_HOST; }
+        Some(AcceptLine)
+    }
+}
+
+/// Obsługa połączenie z serwerem.
+/// Odczytujemy polecenia z linii poleceń,
+/// wysyłamy do serwera i wyświetlamy wynik.
 fn handle_connection(stream: TcpStream) -> Result<()> {
     let mut conn = Connector::new(stream.try_clone()?, ConnectionSide::Client);
     conn.init()?;
-    
-    // let mut input = String::new();
+
     let mut edt = DefaultEditor::new().unwrap();
+    edt.bind_sequence(
+        Event::KeySeq(vec![KeyEvent::ctrl('S')]),
+        EventHandler::Conditional(Box::new(SwitchContext)));
+
     if edt.load_history("cmd_history.txt").is_err() {
         println!("No previous history.");
     }
     
-    let prompt = Yellow.paint("cmd> ").to_string();
-    loop { 
+    let there = Yellow.paint("There| cmd> ").to_string();
+    let here = Yellow.paint("Here| cmd> ").to_string();
+    let bye = Green.paint("Bye").to_string();
+
+    loop {
+        let prompt = if unsafe{ REMOTE_HOST } { there.clone() } else { here.clone() };
+        
         let line = edt.readline(prompt.as_str());
         match line {  
             Ok(line) => {
-                edt.add_history_entry(line.as_str()).expect("can't add to history");
-                serve_line(&mut conn, line)?;
+                if !line.is_empty() {
+                    edt.add_history_entry(line.as_str()).expect("can't add to history");
+                    serve_line(&mut conn, line)?;
+                }
             },
             Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
-                println!("Bye!");
+                println!("{}", bye);
                 break;
             },
             _ => ()
@@ -88,7 +116,7 @@ fn serve_line(conn: &mut Connector, line: String) -> Result<()>{
             .iter()
             .map(|item| item.to_string())
             .collect();
-        
+
         let request = Request::new(command, args);
         conn.send_request(request)?;
         let answer = conn.read_answer()?;
@@ -106,20 +134,6 @@ fn display_answer(answer: Answer) {
                     _ => print_common(answer.data),
                 }
             }
-            
-            // print_common(answer.data);
-            // if !answer.data.is_empty() {
-            //     match answer.cmd.as_str() {
-            //         "pwd" => print_common(answer.data),
-            //         "cd" => print_common(answer.data),
-            //         "mkdir" => print_common(answer.data),
-            //         "ls" | "la" => print_file_info(answer.data),
-            //         "rmdir" => print_common(answer.data),
-            //         "exe" => print_exe_answer(answer.data),
-            // 
-            //         _ => println!("{:?}", answer),
-            //     }
-            // }
         },
         _ => {
             let err = Error::from(answer);

@@ -40,3 +40,18 @@ la
 ls
 ls -l
 cd
+pwd
+ls
+pwd
+ls
+ll
+pwd
+ls
+pwd
+ls
+pwd
+ls
+ll
+la
+ls
+la

@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ansi_term = "0.12.1"
-rustyline = "15.0.0"
+rustyline = { version = "15.0.0", features = ["custom-bindings"] }
 shared = { version = "0.1.0", path = "../shared" }
+
 

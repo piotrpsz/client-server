@@ -21,15 +21,17 @@
 // SOFTWARE.
 
 use shared::data::{
-    request::Request
+    request::Request,
+    answer::Answer
 };
-use std::io::{ stdin, ErrorKind};
+use std::io::ErrorKind;
 use std::net::*;
-use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
 use shared::ufs::fileinfo::FileInfo;
 use shared::xerror::{ Error, Result };
 use ansi_term::Colour::{ Yellow, Red };
+use rustyline::{ DefaultEditor, error::ReadlineError };
+
 
 fn main() -> Result<()>{
     let addr = SocketAddr::from(([127, 0, 0, 1], 25105));
@@ -52,33 +54,44 @@ fn handle_connection(stream: TcpStream) -> Result<()> {
     let mut conn = Connector::new(stream.try_clone()?, ConnectionSide::Client);
     conn.init()?;
     
-    let mut input = String::new();
-    loop {
-        // Odczytaj z terminala polecenie wraz z argumentami.
-        input.clear();
-        eprint!("{}", Yellow.paint("cmd> "));
-        // eprint!("cmd> ");
-        stdin().read_line(&mut input)?;
-        input = input.trim().to_string();
-        if input.is_empty() {
-            // Pusta linia oznacza zakończenie programu..
-            break;
+    // let mut input = String::new();
+    let mut edt = DefaultEditor::new().unwrap();
+    if edt.load_history("cmd_history.txt").is_err() {
+        println!("No previous history.");
+    }
+    
+    let prompt = Yellow.paint("cmd> ").to_string();
+    loop { 
+        let line = edt.readline(prompt.as_str());
+        match line {  
+            Ok(line) => {
+                edt.add_history_entry(line.as_str()).expect("can't add to history");
+                serve_line(&mut conn, line)?;
+            },
+            Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
+                println!("Bye!");
+                break;
+            },
+            _ => ()
         }
-        // Wszystkie elementy oddzielone są spacjami.
-        // Pierwszy element to polecenie, reszta to argumenty.
-        let tokens = input.split_whitespace().collect::<Vec<&str>>();
-        let command = tokens[0];
-        let mut args = Vec::with_capacity(tokens.len() - 1);
-        for token in tokens[1..].iter() {
-            args.push(token.to_string());       
-        }
+        edt.save_history("cmd_history.txt").unwrap();
+    }
+    Ok(())
+}
 
-        //===========================================================
+fn serve_line(conn: &mut Connector, line: String) -> Result<()>{
+    let line = line.trim().to_string();
+    if !line.is_empty() {
+        println!("{}", line);
+        let tokens = line.split_whitespace().collect::<Vec<&str>>();
+        let command = tokens[0];
+        let args = tokens[1..]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
         
-        // Komunikacja z serwerem.
         let request = Request::new(command.into(), args);
         conn.send_request(request)?;
-
         let answer = conn.read_answer()?;
         display_answer(answer);
     }

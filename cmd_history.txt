@@ -70,3 +70,21 @@ whoami
 pwd
 cd
 pwd
+echo "Pi0trus59!" | sudo -s
+pwd
+apt uptdate
+apt update
+apt upgrade
+whoami
+apt update
+la
+pwd
+stat README.md
+la
+ls
+ll
+stat README.md
+pwd
+la
+stat README.md
+la

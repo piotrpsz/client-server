@@ -23,6 +23,7 @@
 use std::{ env, process::Command };
 use crate::data::{answer::Answer, request::Request };
 use crate::ufs::dir::Dir;
+use crate::ufs::fileinfo::FileInfo;
 use crate::xerror::{Result, Error };
 
 pub struct Executor;
@@ -35,6 +36,8 @@ impl Executor {
             "ll" => Self::ls(request.params.as_slice()),
             // Polecenie cd obsługujemy osobno, aby obsłużyć cd bez parametrów.
             "cd" => Self::cd(request.params.as_slice()),
+            // Własne pomysły
+            "stat" => Self::stat(request.params.as_slice()),
             // Reszta standardowo.
             _ => Self::execute_command(request.command.as_str(), request.params.as_slice())
         }
@@ -90,6 +93,21 @@ impl Executor {
         Ok(Answer::new_with_data(0, "OK", "la", data))
     }
 
+    fn stat(params: &[String]) -> Result<Answer> {
+        let made: Result<Vec<String>> = params.iter()
+            .map(|path| {
+                let mut path = path.clone();
+                if !path.starts_with("/") {
+                    let cmd = env::current_dir()?;
+                    path = cmd.to_str().unwrap().to_string() + "/" + &path;
+                }
+                let fi = FileInfo::for_path(path.as_str())?.to_json()?;
+                Ok(fi)
+            })
+            .collect();
+        Ok(Answer::new_with_data(0, "OK", "stat", made?))
+    }
+    
     /// cd - change directory
     fn cd(params: &[String]) -> Result<Answer> {
         let mut path = match params.is_empty() {

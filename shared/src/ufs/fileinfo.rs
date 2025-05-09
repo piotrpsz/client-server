@@ -54,6 +54,8 @@ pub struct FileInfo {
     size: u64,                              // Rozmiar pliku w bajtach
     mode: u32,                              // Oryginalna wartość 'mode' ze 'stat'
     permissions: String,                    // Uprawnienia dostępu np. rwx-r--rw-
+    block_size: u32,                        // Optymalny rozmiar bloku
+    block_number: u32,                      // Liczba 512 bajtowych bloków
     last_access: DateTime<Utc>,             // Data ostatniego dostępu
     last_modification: DateTime<Utc>,       // Data ostatniej modyfikacji
     last_status_changed: DateTime<Utc>,     // Data ostatniej zmiany statusu
@@ -85,6 +87,8 @@ impl FileInfo {
             size: file_stat.st_size as u64,
             mode: file_stat.st_mode,
             permissions: FileInfo::file_permission(file_stat.st_mode),
+            block_size: file_stat.st_blksize as u32,
+            block_number: file_stat.st_blocks as u32,
             last_access: dt_last_access,
             last_modification: dt_last_modification,
             last_status_changed: dt_last_status_changed,
@@ -103,7 +107,7 @@ impl FileInfo {
         Self::validate_path(path)?;
         
         let (path, name) = Self::split_name_and_dir(path)?;
-        Ok(Self::new(&name, &path)?)
+        Self::new(&name, &path)
     }
 
     /// Podział ścieżki do pliku na nazwę i katalog.
@@ -291,7 +295,9 @@ impl FileInfo {
         bufferr.push_str(&format!("\t               type: {:?}\n", self.file_type));
         bufferr.push_str(&format!("\t               size: {:6}\n", self.size));
         bufferr.push_str(&format!("\t        permissions: {}\n", self.permissions));
-        bufferr.push_str(&format!("\t        last access: {}\n", self.last_access.format("%Y-%m-%d %H:%M:%S").to_string()));
+        bufferr.push_str(&format!("\t      rozmiar bloku: {}\n", self.block_size));
+        bufferr.push_str(&format!("\t      liczba bloków: {}\n", self.block_number));
+        bufferr.push_str(&format!("\t        last access: {}\n", self.last_access.format("%Y-%m-%d %H:%M:%S")));
         bufferr.push_str(&format!("\t  last modification: {}\n", self.last_modification.format("%Y-%m-%d %H:%M:%S").to_string()));
         bufferr.push_str(&format!("\tlast status changed: {}\n", self.last_status_changed.format("%Y-%m-%d %H:%M:%S").to_string()));
         bufferr.push_str(&format!("\t             owner : {} (uid: {})\n", self.owner_name, self.owner_id));

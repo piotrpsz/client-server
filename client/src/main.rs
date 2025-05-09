@@ -118,6 +118,7 @@ fn handle_connection(stream: TcpStream) -> Result<()> {
     Ok(())
 }
 
+/// Wykonanie polecenia lokalnie.
 fn serve_line(line: String, display: bool) -> Result<Answer>{
     let tokens = line.split_whitespace().collect::<Vec<&str>>();
     let command = tokens[0].to_string();
@@ -132,9 +133,9 @@ fn serve_line(line: String, display: bool) -> Result<Answer>{
         display_answer(&answer);       
     }
     Ok(answer)
-    
 }
 
+/// Wykonanie polecenia zdalnie
 fn serve_line_remote(conn: &mut Connector, line: String, display: bool) -> Result<Answer>{
     let tokens = line.split_whitespace().collect::<Vec<&str>>();
     let command = tokens[0].to_string();
@@ -158,6 +159,7 @@ fn display_answer(answer: &Answer) {
             if !answer.data.is_empty() {
                 match answer.cmd.as_str() {
                     "ll" | "la" => print_file_info(&answer.data),
+                    "stat" =>print_stat(&answer.data),
                     _ => print_common(&answer.data),
                 }
             }
@@ -187,3 +189,12 @@ fn print_file_info(data: &[String]) {
         });
 }
 
+fn print_stat(data: &[String]) {
+    data.iter()
+        .for_each(|item| {
+            match FileInfo::from_json(item.as_bytes()) {
+                Ok(fi) => println!("{:?}", fi),
+                Err(err) => println!("{:?}", err)
+            }
+        });
+}

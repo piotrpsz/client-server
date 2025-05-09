@@ -26,6 +26,7 @@ use std::ptr::null_mut;
 use crate::xerror::{Result, Error};
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Local, Utc };
+use libc::mode_t;
 
 const FILEINFO_ERR_CODE:i32 = -2;
 const FILEINFO_INVALID_PATH:&str = "invalid path";
@@ -79,13 +80,13 @@ impl FileInfo {
         Ok(Self {
             name: name.into(),
             path,
-            file_type: FileInfo::ftype(file_stat.st_mode),
+            file_type: FileInfo::ftype(file_stat.st_mode as u32),
             owner_id: file_stat.st_uid,
             owner_name: Self::user_name(file_stat.st_uid)?,
             group_id: file_stat.st_gid,
             group_name: Self::group_name(file_stat.st_gid)?,
             size: file_stat.st_size as u64,
-            mode: file_stat.st_mode,
+            mode: file_stat.st_mode as u32,
             permissions: FileInfo::file_permission(file_stat.st_mode),
             block_size: file_stat.st_blksize as u32,
             block_number: file_stat.st_blocks as u32,
@@ -136,7 +137,7 @@ impl FileInfo {
     }
     
     pub fn mode_t(&self) -> libc::mode_t {
-        self.mode
+        self.mode as mode_t
     }
 
     /// Utworzenie reprezentacji obiektu jako text-json.
@@ -157,7 +158,7 @@ impl FileInfo {
 
     /// Zamiana typu pliku z postaci numerycznej na symboliczną (enum).
     pub fn ftype(stat: u32) -> FileType {
-        match stat & libc::S_IFMT {
+        match (stat as mode_t) & libc::S_IFMT {
             libc::S_IFREG => FileType::RegularFile,
             libc::S_IFDIR => FileType::Directory,
             libc::S_IFCHR => FileType::CharacterDevice,
@@ -172,7 +173,7 @@ impl FileInfo {
     /// Zamiana praw dostępu do pliku na postać tekstową,
     fn file_permission(mode: libc::mode_t) -> String {
         let mut buffer = String::new();
-        match Self::ftype(mode) {
+        match Self::ftype(mode as u32) {
             FileType::Directory => { buffer.push('d'); },
             FileType::SymbolicLink => { buffer.push('l'); },
             FileType::CharacterDevice => { buffer.push('c'); },

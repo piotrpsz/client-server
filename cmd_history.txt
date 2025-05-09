@@ -91,3 +91,7 @@ la
 pwd
 ls
 la
+pwd
+la
+pwd
+cd

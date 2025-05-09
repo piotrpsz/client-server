@@ -25,6 +25,7 @@ use std::string::String;
 use std::ffi::CString;
 use std::fs::OpenOptions;
 use chrono::{DateTime, Local};
+use libc::{c_uint, mode_t};
 use crate::xerror::{Result, Error};
 
 static FILE_ERR_CODE: i32 = -1;
@@ -97,7 +98,7 @@ impl File {
     /// Zmiana praw dostępu do pliku.
     pub fn chmod(&self, mode: u32) -> Result<()> {
         unsafe {
-            match libc::chmod(self.cstr.as_ptr(), mode) {
+            match libc::chmod(self.cstr.as_ptr(), mode as mode_t) {
                 0 => Ok(()),
                 _ => Err(Error::from_errno())
             }
@@ -192,7 +193,7 @@ impl File {
         unsafe {
             let flags = libc::O_CREAT | libc::O_EXCL | libc::O_RDWR;
             let mode = libc::S_IRWXU | libc::S_IRWXG | libc::S_IROTH;
-            match libc::open(self.cstr.as_ptr(), flags, mode) {
+            match libc::open(self.cstr.as_ptr(), flags, mode as c_uint) {
                 -1 => Err(Error::from_errno()),
                 fd => {
                     self.fd = fd;

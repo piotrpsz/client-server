@@ -21,9 +21,9 @@
 // SOFTWARE.
 
 use std::{ env, process::Command };
-use shared::data::{ answer::Answer, request::Request };
-use shared::ufs::dir::Dir;
-use shared::xerror::{ Result, Error };
+use crate::data::{answer::Answer, request::Request };
+use crate::ufs::dir::Dir;
+use crate::xerror::{Result, Error };
 
 pub struct Executor;
 
@@ -43,11 +43,16 @@ impl Executor {
     fn execute_command(cmd: &str, args: &[String]) -> Result<Answer> {
         let mut command = Command::new(cmd);
         command.args(args);
-        eprintln!("-- {:?} {:?}", command.get_program(), args);
         
         let output = command.output()?;
-        let err_str = String::from_utf8_lossy(&output.stderr).to_string();
-        let std_str = String::from_utf8_lossy(&output.stdout).to_string();
+        let mut err_str = String::from_utf8_lossy(&output.stderr).to_string();
+        if err_str.as_bytes().last() == Some(&b'\n')  {
+            err_str.truncate(err_str.len() - 1);
+        }
+        let mut std_str = String::from_utf8_lossy(&output.stdout).to_string();
+        if std_str.as_bytes().last() == Some(&b'\n')  {
+            std_str.truncate(std_str.len() - 1);
+        }
         Ok(Answer::new_with_data(0, "OK", cmd, vec![std_str, err_str]))
     }
 

@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+mod side;
+
 use shared::data::{request::Request, answer::Answer};
 use std::{net::*, io::ErrorKind};
 use shared::net::connector::{ConnectionSide, Connector};
@@ -34,9 +36,10 @@ use rustyline::{
     ConditionalEventHandler,
     RepeatCount,
     EventContext,
-    Cmd,
+    Cmd, Cmd::AcceptLine,
     EventHandler};
-use rustyline::Cmd::{AcceptLine};
+use shared::executor::Executor;
+use crate::side::Side;
 
 static mut REMOTE_HOST: bool = true;
 
@@ -71,29 +74,37 @@ impl ConditionalEventHandler for SwitchContext {
 fn handle_connection(stream: TcpStream) -> Result<()> {
     let mut conn = Connector::new(stream.try_clone()?, ConnectionSide::Client);
     conn.init()?;
-
+    let mut side = Side::new()?;
+    
     let mut edt = DefaultEditor::new().unwrap();
     edt.bind_sequence(
-        Event::KeySeq(vec![KeyEvent::ctrl('S')]),
+        Event::KeySeq(vec![KeyEvent::ctrl('Q')]),
         EventHandler::Conditional(Box::new(SwitchContext)));
 
     if edt.load_history("cmd_history.txt").is_err() {
         println!("No previous history.");
     }
     
-    let there = Yellow.paint("There| cmd> ").to_string();
-    let here = Yellow.paint("Here| cmd> ").to_string();
     let bye = Green.paint("Bye").to_string();
 
     loop {
-        let prompt = if unsafe{ REMOTE_HOST } { there.clone() } else { here.clone() };
+        if unsafe{ REMOTE_HOST } {
+            side.set_remote(&mut conn)?;
+        } else {
+            side.set_local()?;
+        }
         
-        let line = edt.readline(prompt.as_str());
+        let line = edt.readline(side.prompt().as_str());
         match line {  
             Ok(line) => {
+                let line = line.trim().to_string();
                 if !line.is_empty() {
                     edt.add_history_entry(line.as_str()).expect("can't add to history");
-                    serve_line(&mut conn, line)?;
+                    if side.remote {
+                        serve_line_remote(&mut conn, line, true)?;
+                    } else {
+                        serve_line(line, true)?;
+                    }
                 }
             },
             Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
@@ -107,43 +118,59 @@ fn handle_connection(stream: TcpStream) -> Result<()> {
     Ok(())
 }
 
-fn serve_line(conn: &mut Connector, line: String) -> Result<()>{
-    let line = line.trim().to_string();
-    if !line.is_empty() {
-        let tokens = line.split_whitespace().collect::<Vec<&str>>();
-        let command = tokens[0].to_string();
-        let args = tokens[1..]
-            .iter()
-            .map(|item| item.to_string())
-            .collect();
+fn serve_line(line: String, display: bool) -> Result<Answer>{
+    let tokens = line.split_whitespace().collect::<Vec<&str>>();
+    let command = tokens[0].to_string();
+    let args = tokens[1..]
+        .iter()
+        .map(|item| item.to_string())
+        .collect();
 
-        let request = Request::new(command, args);
-        conn.send_request(request)?;
-        let answer = conn.read_answer()?;
-        display_answer(answer);
+    let request = Request::new(command, args);
+    let answer = Executor::execute(request)?;
+    if display {
+        display_answer(&answer);       
     }
-    Ok(())
+    Ok(answer)
+    
 }
 
-fn display_answer(answer: Answer) {
+fn serve_line_remote(conn: &mut Connector, line: String, display: bool) -> Result<Answer>{
+    let tokens = line.split_whitespace().collect::<Vec<&str>>();
+    let command = tokens[0].to_string();
+    let args = tokens[1..]
+        .iter()
+        .map(|item| item.to_string())
+        .collect();
+
+    let request = Request::new(command, args);
+    conn.send_request(request)?;
+    let answer = conn.read_answer()?;
+    if display {
+        display_answer(&answer);
+    }
+    Ok(answer)
+}
+
+fn display_answer(answer: &Answer) {
     match answer.message.as_str() {
         "OK" => {
             if !answer.data.is_empty() {
                 match answer.cmd.as_str() {
-                    "ll" | "la" => print_file_info(answer.data),
-                    _ => print_common(answer.data),
+                    "ll" | "la" => print_file_info(&answer.data),
+                    _ => print_common(&answer.data),
                 }
             }
         },
         _ => {
-            let err = Error::from(answer);
+            let err = Error::from(answer.clone());
             let err_str = format!("{:?}", err);
             eprintln!("{}", Red.paint(err_str))
         }
     };
 }
 
-fn print_common(data: Vec<String>) {
+fn print_common(data: &[String]) {
     data.iter()
          .for_each(|item| {
             if !item.is_empty() {
@@ -152,7 +179,7 @@ fn print_common(data: Vec<String>) {
         });
 }
 
-fn print_file_info(data: Vec<String>) {
+fn print_file_info(data: &[String]) {
     data.iter()
         .for_each(|item| {
             let fi = FileInfo::from_json(item.as_bytes()).unwrap();

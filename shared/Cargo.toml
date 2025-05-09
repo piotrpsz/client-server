@@ -10,6 +10,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 rand = "0.9.1"
 libc = "0.2.172"
+dirs = "6.0.0"
 
 [profile.dev]
 overflow-checks = false

@@ -22,17 +22,15 @@
 
 extern crate core;
 
-mod executor;
-
 use std::error::Error;
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 use std::net::*;
 use std::{io, thread};
-use crossbeam_channel::{unbounded, bounded, Sender, Receiver, select};
+use crossbeam_channel::{bounded, select, unbounded, Receiver, Sender};
 use shared::data::answer::Answer;
 use shared::net::connector::{ConnectionSide, Connector};
-use crate::executor::Executor;
+use shared::executor::Executor;
 
 static STOP: AtomicBool = AtomicBool::new(false);
 static TASK_COUNT: AtomicU32 = AtomicU32::new(0);

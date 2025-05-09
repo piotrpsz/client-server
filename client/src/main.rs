@@ -144,6 +144,7 @@ fn serve_line_remote(conn: &mut Connector, line: String, display: bool) -> Resul
         .map(|item| item.to_string())
         .collect();
 
+    // "get", "send"
     let request = Request::new(command, args);
     conn.send_request(request)?;
     let answer = conn.read_answer()?;

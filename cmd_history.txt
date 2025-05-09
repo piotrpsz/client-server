@@ -88,3 +88,6 @@ pwd
 la
 stat README.md
 la
+pwd
+ls
+la

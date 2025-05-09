@@ -63,46 +63,6 @@ fn accept(listener: &TcpListener, sender: Sender<TcpStream>) {
     }
 }
 
-/*
-fn main() {
-    // use shared::crypto::crypto;
-    // let data = vec![1u8, 12, 3, 14, 5, 6, 17, 8, 9, 10];
-    // let block = crypto::bytes_to_block(&data);
-    // let mut buffer = vec![0u8; 16];
-    // crypto::block_to_bytes(block, &mut buffer);
-    // eprintln!("{:?}", buffer);
-    
-    
-    let key = "TESTKEY".as_bytes();
-    let bf = Blowfish::new(key).unwrap();
-    
-    let text = "Piotr";
-    let cipher = bf.encrypt_cbc(text.as_bytes());
-    let plain = bf.decrypt_cbc(cipher.as_slice());
-    assert_eq!(plain, text.as_bytes());
-    eprintln!("{:?}", String::from_utf8_lossy(plain.as_slice()));
-    
-    // let a = 1u32;
-    // let b = 2u32;
-    // let expected_a =  0xdf333fd2u32;
-    // let expected_b =  0x30a71bb4u32;
-    // let result = bf.encrypt(a, b);
-    // // assert_eq!(result.0, expected_a);
-    // // assert_eq!(result.1, expected_b);
-    // eprintln!("{:x}", expected_a );
-    // eprintln!("{:x}", expected_b );
-    // if result.0 == expected_a && result.1 == expected_b {
-    //     eprintln!("Encryption test passed");
-    // }
-    // 
-    // let result1 = bf.decrypt(expected_a, expected_b);
-    // if result1.0 == a && result1.1 == b {
-    //     eprintln!("Decryption test passed");
-    // }
-
-}
-*/
-
 fn main() -> Result<(), Box<dyn Error>>{
     let ctrl_receiver = ctrlc_handler()?;
     let (accept_sender, accept_receiver) = bounded::<TcpStream>(1);
@@ -131,15 +91,15 @@ fn main() -> Result<(), Box<dyn Error>>{
                 }
                 recv(accept_receiver) -> value => {
                     match value {
-                        Ok(tcp) => {
+                        Ok(stream) => {
                             // Jeśli nie przerwano działania programu,
                             // uruchamiamy nowy task dla obsługi połączenia
                             // z klientem.
                             if !STOP.load(Relaxed) {
                                 let ctrl_channel = ctrl_receiver.clone();
-                                let mut tcp_info = tcp;
+                                let mut stream = stream;
                                 s.spawn(move |_| {
-                                    handle_client(&mut tcp_info, ctrl_channel);
+                                    handle_client(&mut stream, ctrl_channel);
                                 });
                             }
                         }

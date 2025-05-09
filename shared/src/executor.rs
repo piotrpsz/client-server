@@ -46,7 +46,7 @@ impl Executor {
     fn execute_command(cmd: &str, args: &[String]) -> Result<Answer> {
         let mut command = Command::new(cmd);
         command.args(args);
-        
+
         let output = command.output()?;
         let mut err_str = String::from_utf8_lossy(&output.stderr).to_string();
         if err_str.as_bytes().last() == Some(&b'\n')  {
@@ -107,7 +107,7 @@ impl Executor {
             .collect();
         Ok(Answer::new_with_data(0, "OK", "stat", made?))
     }
-    
+
     /// cd - change directory
     fn cd(params: &[String]) -> Result<Answer> {
         let mut path = match params.is_empty() {

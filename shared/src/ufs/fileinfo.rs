@@ -183,7 +183,7 @@ impl FileInfo {
             _ => { buffer.push('-'); }
         };
         
-        
+
         match mode & libc::S_IRUSR != 0 {
             true => buffer.push('r'),
             _ => buffer.push('-')

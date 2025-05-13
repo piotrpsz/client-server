@@ -25,15 +25,26 @@ impl Side {
         self.remote = true;
         self. remote_host_name = host_answer.data[0].clone();
         self.remote_user_name = user_answer.data[0].clone();
+
+        if let Some(idx) = self.remote_host_name.rfind('.') {
+            self.remote_host_name.truncate(idx);
+        }
+        self.remote_host_name += ".remote";
         Ok(())    
     }
     
     pub fn set_local(&mut self) -> Result<()>{
         let host_answer = serve_line("uname -n".into(), false)?;
+        
         let user_answer = serve_line("whoami".into(), false)?;
         self.remote = false;
         self.local_host_name = host_answer.data[0].clone();
         self.local_user_name = user_answer.data[0].clone();
+        
+        if let Some(idx) = self.local_host_name.rfind('.') {
+            self.local_host_name.truncate(idx);
+        }
+        self.local_host_name += ".local";
         Ok(())
     }
     

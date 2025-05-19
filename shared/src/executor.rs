@@ -23,6 +23,7 @@
 use std::{ env, process::Command };
 use crate::data::{answer::Answer, request::Request };
 use crate::ufs::dir::Dir;
+use crate::ufs::file::File;
 use crate::ufs::fileinfo::FileInfo;
 use crate::xerror::{Result, Error };
 
@@ -36,6 +37,10 @@ impl Executor {
             "ll" => Self::ls(request.params.as_slice()),
             // Polecenie cd obsługujemy osobno, aby obsłużyć cd bez parametrów.
             "cd" => Self::cd(request.params.as_slice()),
+            // Polecenie wysłania pliku
+            "put" => Self::download(request.params.as_slice()),
+            // Polecenie pobrania pliku.
+            "get" => Self::upload(request.params.as_slice()),
             // Własne pomysły
             "stat" => Self::stat(request.params.as_slice()),
             // Reszta standardowo.
@@ -129,5 +134,20 @@ impl Executor {
             },
             Err(err) => Err(Error::from(err))
         }
+    }
+    
+    fn download(params: &[String]) -> Result<Answer> {
+        Ok(Answer::new(0, "OK", "download"))
+    }
+    
+    fn upload(params: &[String]) -> Result<Answer> {
+        let name = params[0].clone();
+        eprintln!("upload: {:?}", params);
+        
+        let fh = File::new(name.as_str());
+        let data = fh.read_all_vec()?;
+        let mut answer = Answer::new_with_data(0, "OK", "upload", params.to_vec());
+        answer.binary = data;
+        Ok(answer)
     }
 }

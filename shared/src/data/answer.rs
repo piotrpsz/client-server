@@ -26,14 +26,15 @@ use serde_json::Result;
 use std::fmt::Debug;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Answer {
     id: u64,
     timestamp: u64,
     pub code: i32,
     pub message: String,
     pub cmd: String,
-    pub data: Vec<String>
+    pub data: Vec<String>,
+    pub binary: Vec<u8>,
 }
 
 impl Answer {
@@ -44,7 +45,7 @@ impl Answer {
             code,
             message: message.into(),
             cmd: cmd.into(),
-            data: Vec::new()
+            ..Default::default()
         }
     }
     pub fn new_with_data(code: i32, message: &str, cmd: &str, data: Vec<String>) -> Self {
@@ -54,7 +55,8 @@ impl Answer {
             code,
             message: message.into(),
             cmd: cmd.into(),
-            data
+            data,
+            ..Default::default()
         }
     }
     

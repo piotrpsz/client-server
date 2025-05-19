@@ -1,17 +1,4 @@
 #V2
-ala
-pwd
-dd
-asd
-ls
-la
-ls -al
-la
-ll
-pwd
-ls
-ls -l
-la
 ls
 ls -l
 la
@@ -95,3 +82,20 @@ pwd
 la
 pwd
 cd
+get ala
+la
+pwd
+cd Download
+cd Downloads
+ll
+get interval_map.cpp
+put interval_map.cpp
+get interval_map.cpp
+pwd
+ll
+pwd
+get Piotr-photo.jpg
+pwd
+cd Downloads
+ll
+pwd

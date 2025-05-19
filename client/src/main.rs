@@ -39,6 +39,7 @@ use rustyline::{
     Cmd, Cmd::AcceptLine,
     EventHandler};
 use shared::executor::Executor;
+use shared::ufs::file::File;
 use crate::side::Side;
 
 static mut REMOTE_HOST: bool = true;
@@ -74,6 +75,7 @@ impl ConditionalEventHandler for SwitchContext {
 fn handle_connection(stream: TcpStream) -> Result<()> {
     let mut conn = Connector::new(stream.try_clone()?, ConnectionSide::Client);
     conn.init()?;
+    serve_line_remote(&mut conn, "cd".to_string(), false)?;
     let mut side = Side::new()?;
     
     let mut edt = DefaultEditor::new().unwrap();
@@ -148,6 +150,12 @@ fn serve_line_remote(conn: &mut Connector, line: String, display: bool) -> Resul
     let request = Request::new(command, args);
     conn.send_request(request)?;
     let answer = conn.read_answer()?;
+    if answer.cmd == "upload" {
+        let mut fh = File::new(answer.data[0].as_str());
+        fh.create()?;
+        fh.write(answer.binary.as_slice())?;
+        fh.close()?;
+    }
     if display {
         display_answer(&answer);
     }

@@ -95,6 +95,7 @@ impl Connector {
     fn init_client(&mut self) -> io::Result<()> {
         self.send_client_id()?;
         self.read_keys()
+        
     } // fn init_client
 
     fn send_client_id(&mut self) -> io::Result<()> {
